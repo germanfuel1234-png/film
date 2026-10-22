@@ -223,10 +223,23 @@ class ScanTab(QWidget):
             return
 
         self._worker = ScanWorker(self._ctx.scan_controller, self.batch_spin.value())
+        self._batch_had_error = False
         self._worker.frame_processed.connect(self._on_frame_processed)
-        self._worker.scan_error.connect(lambda msg: self.project_status_label.setText(f"Error: {msg}"))
-        self._worker.finished_batch.connect(lambda: self.project_status_label.setText("Tanda finalizada."))
+        self._worker.scan_error.connect(self._on_scan_error)
+        self._worker.finished_batch.connect(self._on_batch_finished)
         self._worker.start()
+
+    def _on_scan_error(self, msg: str) -> None:
+        self._batch_had_error = True
+        self.project_status_label.setText(f"Error: {msg}")
+
+    def _on_batch_finished(self) -> None:
+        # "Tanda finalizada." NO debe pisar un mensaje de error: antes
+        # siempre se mostraba, incluso cuando la tanda falló de entrada
+        # (ej. "Calibración incompleta") y se guardaron 0 fotogramas,
+        # ocultándole al operador que algo salió mal.
+        if not self._batch_had_error:
+            self.project_status_label.setText("Tanda finalizada.")
 
     def _pause(self) -> None:
         if self._worker is not None:
