@@ -1,0 +1,13 @@
+# Núcleo
+opencv-python-headless>=4.9
+numpy>=1.26
+pyserial>=3.5
+PySide6>=6.6
+
+# Opcionales, según qué cámara(s) confirme el cliente (ver ARQUITECTURA.md §3):
+# harvesters>=1.4        # cámara industrial GenICam/GigE Vision (ej. Huateng)
+# gphoto2>=2.3            # cámara réflex Canon (requiere libgphoto2 instalado en el sistema)
+# rawpy>=0.19              # decodificar RAW/DNG real para previsualizar en la pestaña "Resultados"
+
+# Tests
+pytest>=8.0

@@ -1,0 +1,20 @@
+{
+  "camera": {
+    "type": "simulated",
+    "industrial_cti_path": "",
+    "industrial_device_index": 0
+  },
+  "motor": {
+    "mode": "simulated",
+    "port": "",
+    "baudrate": 115200,
+    "steps_per_frame": 1000
+  },
+  "calibration": {
+    "film_format": "35mm",
+    "search_zone_left": { "x0": 10, "y0": 100, "x1": 110, "y1": 1200 },
+    "search_zone_right": { "x0": 760, "y0": 100, "x1": 860, "y1": 1200 },
+    "reference_box": { "x0": 220, "y0": 120, "x1": 680, "y1": 1180 }
+  },
+  "projects_root": "~/FILMS/projects"
+}
