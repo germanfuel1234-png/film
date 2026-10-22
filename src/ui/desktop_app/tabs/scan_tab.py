@@ -150,6 +150,10 @@ class ScanTab(QWidget):
         self._reload_project_list()
         self._ctx.activate_project(project)
         self.project_status_label.setText(f"Proyecto activo: {project.name} ({project.project_id})")
+        # Un proyecto recién creado arranca en 0 — sin este reset, quedaba
+        # pegado el contador del proyecto anterior (confuso: parecía que
+        # el nuevo proyecto ya tenía fotogramas guardados).
+        self.counter_label.setText("Guardados / aceptados: 0 / 0")
         self._refresh_storage_estimate()
 
     def _open_selected_project(self) -> None:
