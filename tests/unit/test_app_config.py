@@ -9,11 +9,12 @@ def test_default_config_matches_repo_file():
     poder cargarse y coincidir con sus propios valores de ejemplo."""
     cfg = load_app_config(DEFAULT_CONFIG_PATH)
     assert cfg.camera.type == "simulated"
+    assert cfg.camera.simulated_sample_dir == "assets/real_frames"
     assert cfg.motor.mode == "simulated"
     assert cfg.motor.steps_per_frame == 1000
     assert cfg.calibration.film_format == "35mm"
-    assert cfg.calibration.search_zone_left.x0 == 10
-    assert cfg.calibration.reference_box.x1 == 680
+    assert cfg.calibration.search_zone_left.x0 == 380
+    assert cfg.calibration.reference_box.x1 == 1360
 
 
 def test_missing_file_falls_back_to_defaults(tmp_path):

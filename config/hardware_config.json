@@ -2,7 +2,8 @@
   "camera": {
     "type": "simulated",
     "industrial_cti_path": "",
-    "industrial_device_index": 0
+    "industrial_device_index": 0,
+    "simulated_sample_dir": "assets/real_frames"
   },
   "motor": {
     "mode": "simulated",
@@ -12,9 +13,9 @@
   },
   "calibration": {
     "film_format": "35mm",
-    "search_zone_left": { "x0": 10, "y0": 100, "x1": 110, "y1": 1200 },
-    "search_zone_right": { "x0": 760, "y0": 100, "x1": 860, "y1": 1200 },
-    "reference_box": { "x0": 220, "y0": 120, "x1": 680, "y1": 1180 }
+    "search_zone_left": { "x0": 380, "y0": 0, "x1": 1600, "y1": 150 },
+    "search_zone_right": { "x0": 380, "y0": 1015, "x1": 1600, "y1": 1080 },
+    "reference_box": { "x0": 700, "y0": 250, "x1": 1360, "y1": 1020 }
   },
   "projects_root": "~/FILMS/projects"
 }

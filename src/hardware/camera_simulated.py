@@ -32,7 +32,12 @@ class SimulatedCamera(CameraDriver):
         self._frames = sorted(self._sample_dir.glob("roll_*.png"))
         if not self._frames:
             # fallback: cualquier imagen disponible en la carpeta de muestras
-            self._frames = sorted(self._sample_dir.glob("*.png"))
+            # (fotos reales del cliente vienen en .JPG, no solo .png sintético)
+            patterns = ("*.png", "*.PNG", "*.jpg", "*.JPG", "*.jpeg", "*.JPEG")
+            found = set()
+            for pattern in patterns:
+                found.update(self._sample_dir.glob(pattern))
+            self._frames = sorted(found)
         if not self._frames:
             self._state = CameraState(
                 status=CameraStatus.ERROR,

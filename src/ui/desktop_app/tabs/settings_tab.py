@@ -102,6 +102,14 @@ class SettingsTab(QWidget):
         self.camera_type_combo.addItems(CAMERA_TYPES)
         form.addRow("Tipo (al arrancar)", self.camera_type_combo)
 
+        sample_dir_row = QHBoxLayout()
+        self.sample_dir_edit = QLineEdit()
+        sample_dir_browse = QPushButton("Examinar carpeta...")
+        sample_dir_browse.clicked.connect(self._browse_sample_dir)
+        sample_dir_row.addWidget(self.sample_dir_edit)
+        sample_dir_row.addWidget(sample_dir_browse)
+        form.addRow("Fotogramas de ejemplo (simulada)", sample_dir_row)
+
         cti_row = QHBoxLayout()
         self.cti_path_edit = QLineEdit()
         cti_browse = QPushButton("Examinar...")
@@ -177,6 +185,11 @@ class SettingsTab(QWidget):
         if path:
             self.cti_path_edit.setText(path)
 
+    def _browse_sample_dir(self) -> None:
+        path = QFileDialog.getExistingDirectory(self, "Elegir carpeta de fotogramas de ejemplo")
+        if path:
+            self.sample_dir_edit.setText(path)
+
     def _browse_projects_root(self) -> None:
         path = QFileDialog.getExistingDirectory(self, "Elegir carpeta de proyectos")
         if path:
@@ -198,6 +211,7 @@ class SettingsTab(QWidget):
 
     def _load_into_fields(self, config: AppConfig) -> None:
         self.camera_type_combo.setCurrentText(config.camera.type)
+        self.sample_dir_edit.setText(config.camera.simulated_sample_dir)
         self.cti_path_edit.setText(config.camera.industrial_cti_path)
         self.device_index_spin.setValue(config.camera.industrial_device_index)
 
@@ -244,6 +258,7 @@ class SettingsTab(QWidget):
         return AppConfig(
             camera=CameraConfig(
                 type=self.camera_type_combo.currentText(),
+                simulated_sample_dir=self.sample_dir_edit.text().strip(),
                 industrial_cti_path=self.cti_path_edit.text().strip(),
                 industrial_device_index=self.device_index_spin.value(),
             ),

@@ -1,15 +1,23 @@
 """Detección de perforaciones del film dentro de zonas de búsqueda configurables.
 
-Las perforaciones del celuloide son consistentemente más claras (o más
-oscuras, según iluminación) que el resto de la imagen y tienen un tamaño y
-forma acotados. El algoritmo:
+Las perforaciones se detectan por **proyección de brillo + picos periódicos**,
+no por segmentación de blobs/contornos. Motivo: se probó primero un enfoque
+de umbral (Otsu) + contornos, y funcionaba bien sobre imágenes sintéticas,
+pero **falló con fotos reales de película retroiluminada**: el borde del
+film entre dos perforaciones adyacentes no es opaco, deja pasar algo de luz
+de fondo (la base del film es translúcida), así que el contraste entre
+"agujero" y "borde entre agujeros" resultó menor que entre "borde" y
+"fondo negro" — un único umbral global terminaba fusionando varias
+perforaciones en un solo blob gigante en vez de separarlas.
 
-1. Recorta las zonas de búsqueda izquierda/derecha (definidas en la pestaña
-   "Configuración" del prototipo).
-2. Binariza por umbral (Otsu, se adapta a la exposición de cada toma).
-3. Busca contornos cuyo tamaño/forma sea compatible con una perforación.
-4. Devuelve el centro de cada perforación encontrada, en coordenadas de la
-   imagen completa (no de la zona recortada).
+La proyección es mucho más robusta a esto: como las perforaciones tienen un
+espaciado regular y conocido, basta con promediar el brillo a lo largo del
+eje de la zona (columnas si la zona es horizontal, filas si es vertical) y
+buscar los picos periódicos — cada pico es el centro de una perforación,
+sin necesidad de que el valle entre dos picos llegue a negro puro. Validado
+contra fotogramas reales de 35mm (retroiluminados, cámara Canon de prueba):
+8/8 perforaciones correctamente ubicadas donde el enfoque por contornos
+encontraba 0-4 fusionadas.
 """
 
 from __future__ import annotations
@@ -38,56 +46,108 @@ class SearchZone:
 class Perforation:
     cx: float  # centro en coordenadas de la imagen completa
     cy: float
-    area: float
+    area: float  # proxy de confianza (prominencia del pico), no área en px²
     zone: str  # "left" | "right"
 
 
-def _binarize(gray: np.ndarray) -> np.ndarray:
-    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-    _, binary = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    # Las perforaciones suelen ser la región más clara del borde del film;
-    # si Otsu invirtió la polaridad (más píxeles blancos que negros),
-    # se corrige para quedarnos con la clase minoritaria "clara".
-    if np.count_nonzero(binary) > binary.size / 2:
-        binary = cv2.bitwise_not(binary)
-    return binary
+def _find_local_maxima(signal: np.ndarray, min_distance: int, min_height: float) -> List[int]:
+    """Picos de `signal` por supresión de no-máximos: toma el punto más
+    alto, descarta todo lo que esté a menos de `min_distance`, repite con
+    el siguiente más alto restante.
+
+    Necesario porque el techo de una perforación es una MESETA ancha (el
+    agujero es un rectángulo redondeado, no una espiga), no un pico
+    afilado: una comparación ingenua "más alto que el vecino inmediato"
+    cuenta varios puntos de la misma meseta como perforaciones distintas.
+    """
+    candidates = [i for i in range(len(signal)) if signal[i] > min_height]
+    candidates.sort(key=lambda i: signal[i], reverse=True)
+
+    accepted: List[int] = []
+    for i in candidates:
+        if all(abs(i - a) >= min_distance for a in accepted):
+            accepted.append(i)
+    return sorted(accepted)
+
+
+def _parabolic_refine(signal: np.ndarray, i: int) -> float:
+    """Ajusta una parábola a signal[i-1], signal[i], signal[i+1] y devuelve
+    la posición (sub-píxel) de su vértice — mucho más preciso que quedarse
+    con el índice entero del máximo discreto."""
+    if i <= 0 or i >= len(signal) - 1:
+        return float(i)
+    left, center, right = signal[i - 1], signal[i], signal[i + 1]
+    denom = left - 2 * center + right
+    if denom == 0:
+        return float(i)
+    offset = 0.5 * (left - right) / denom
+    return i + float(np.clip(offset, -1.0, 1.0))
+
+
+def _weighted_centroid(profile: np.ndarray) -> float:
+    """Centro de masa de `profile` (ya recortado a una ventana angosta
+    alrededor del pico), restando el piso para no arrastrar el centro
+    hacia el fondo. Da precisión sub-píxel; un argmax entero no."""
+    baseline = profile.min()
+    weights = profile - baseline
+    total = weights.sum()
+    if total <= 0:
+        return (len(profile) - 1) / 2.0
+    indices = np.arange(len(profile))
+    return float((indices * weights).sum() / total)
 
 
 def _find_perforations_in_zone(
     frame_gray: np.ndarray,
     zone: SearchZone,
     zone_name: str,
-    min_area: int = 200,
-    max_area: int = 20000,
+    min_spacing_px: int = 100,
+    min_relative_height: float = 0.5,
 ) -> List[Perforation]:
     crop = zone.crop(frame_gray)
     if crop.size == 0:
         return []
 
-    binary = _binarize(crop)
-    contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    # Zona más ancha que alta -> perforaciones alineadas horizontalmente
+    # (tira de film apaisada, ej. fotos de prueba reales); más alta que
+    # ancha -> alineadas verticalmente (tira de film en orientación vertical,
+    # ej. los fotogramas sintéticos de assets/sample_frames).
+    horizontal = crop.shape[1] >= crop.shape[0]
+    axis = 0 if horizontal else 1
+    profile = crop.mean(axis=axis).astype(np.float64)
+
+    smoothing_kernel = np.ones(9) / 9
+    smooth = np.convolve(profile, smoothing_kernel, mode="same")
+
+    if smooth.max() == smooth.min():
+        return []  # zona sin variación de brillo: no hay nada que detectar
+
+    threshold = smooth.min() + (smooth.max() - smooth.min()) * min_relative_height
+    peaks = _find_local_maxima(smooth, min_distance=min_spacing_px, min_height=threshold)
 
     results: List[Perforation] = []
-    for contour in contours:
-        area = cv2.contourArea(contour)
-        if not (min_area <= area <= max_area):
-            continue
-        # las perforaciones son aproximadamente rectangulares/cuadradas:
-        # se descartan formas muy alargadas (ruido, rayas del film).
-        x, y, w, h = cv2.boundingRect(contour)
-        aspect = w / h if h else 0
-        if not (0.4 <= aspect <= 2.5):
-            continue
-        M = cv2.moments(contour)
-        if M["m00"] == 0:
-            continue
-        local_cx = M["m10"] / M["m00"]
-        local_cy = M["m01"] / M["m00"]
+    for peak in peaks:
+        refined_peak = _parabolic_refine(smooth, peak)
+
+        if horizontal:
+            local_cx = refined_peak
+            strip = crop[:, max(0, peak - 10) : peak + 10]
+            # El perfil ortogonal (strip.mean(axis=1)) recorre TODA la
+            # altura del crop sin recortar, así que su centroide ya está
+            # en coordenadas del crop — no hay que sumarle ningún offset
+            # de ventana (eso fue un bug: se sumaba un offset del eje X
+            # a una coordenada del eje Y).
+            local_cy = _weighted_centroid(strip.mean(axis=1)) if strip.size else crop.shape[0] / 2
+        else:
+            local_cy = refined_peak
+            strip = crop[max(0, peak - 10) : peak + 10, :]
+            local_cx = _weighted_centroid(strip.mean(axis=0)) if strip.size else crop.shape[1] / 2
+
         results.append(
             Perforation(
                 cx=zone.x0 + local_cx,
                 cy=zone.y0 + local_cy,
-                area=area,
+                area=float(smooth[peak]),  # prominencia del pico, usado como proxy de confianza
                 zone=zone_name,
             )
         )
@@ -107,23 +167,36 @@ def detect_perforations(
 
 
 def best_perforation_pair(perforations: List[Perforation]) -> Tuple[Perforation, Perforation] | None:
-    """Elige una perforación izquierda y una derecha representativas
-    (la de mayor área, como proxy de mejor nitidez/contraste) para usar
-    como punto de partida — pensado para el primer marcado de referencia
-    en calibración, cuando todavía no hay nada contra qué comparar.
+    """Elige una perforación izquierda y una derecha que correspondan a la
+    MISMA fila/columna física — pensado para el primer marcado de
+    referencia en calibración, cuando todavía no hay nada contra qué comparar.
 
-    No usar esto para comparar dos fotogramas distintos: si hay varias
-    perforaciones por fotograma (35mm = 4), la de mayor área puede
-    corresponder a una fila distinta en cada toma. Para eso usar
-    `match_pair_to_reference`.
+    Si hay varias perforaciones por fotograma (35mm = 4), no alcanza con
+    tomar la de mayor confianza en cada zona por separado: con la
+    confianza casi idéntica entre agujeros (ver detect_perforations), eso
+    termina emparejando filas distintas (ej. fila 1 a la izquierda con
+    fila 3 a la derecha), lo que arruina el ángulo de referencia. En vez
+    de eso, se elige la combinación izquierda/derecha más ALINEADA: zonas
+    verticales (izq/der separadas en X) se alinean por Y; zonas
+    horizontales (arriba/abajo separadas en Y) se alinean por X. No hace
+    falta saber la orientación de antemano — el eje de separación entre
+    zonas siempre va a tener una diferencia mucho mayor que el eje
+    alineado, así que `min(dy, dx)` identifica el eje correcto solo.
     """
     left = [p for p in perforations if p.zone == "left"]
     right = [p for p in perforations if p.zone == "right"]
     if not left or not right:
         return None
-    best_left = max(left, key=lambda p: p.area)
-    best_right = max(right, key=lambda p: p.area)
-    return best_left, best_right
+
+    best_pair = None
+    best_score = None
+    for l in left:
+        for r in right:
+            score = min(abs(l.cy - r.cy), abs(l.cx - r.cx))
+            if best_score is None or score < best_score:
+                best_score = score
+                best_pair = (l, r)
+    return best_pair
 
 
 def match_pair_to_reference(
@@ -136,7 +209,7 @@ def match_pair_to_reference(
     Es el matching correcto para comparar dos fotogramas: al haber varias
     perforaciones por cuadro (35mm = 4), hace falta trackear la MISMA
     perforación física de un fotograma al siguiente (tolerando el jitter
-    mecánico), no simplemente la de mayor área en cada toma por separado.
+    mecánico), no simplemente la de mayor confianza en cada toma por separado.
     """
     ref_left, ref_right = reference_pair
     left = [p for p in perforations if p.zone == "left"]

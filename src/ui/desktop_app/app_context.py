@@ -15,7 +15,7 @@ from typing import Optional
 
 from PySide6.QtCore import QObject, Signal
 
-from ...core.app_config import AppConfig, load_app_config
+from ...core.app_config import AppConfig, load_app_config, resolve_project_path
 from ...core.calibration import Calibrator
 from ...core.project_manager import ProjectConfig, ProjectManager
 from ...core.scan_controller import ScanController
@@ -61,6 +61,8 @@ class AppContext(QObject):
             if self.config.camera.industrial_cti_path:
                 kwargs["cti_path"] = self.config.camera.industrial_cti_path
             return kwargs
+        if camera_type == "simulated" and self.config.camera.simulated_sample_dir:
+            return {"sample_dir": resolve_project_path(self.config.camera.simulated_sample_dir)}
         return {}
 
     def _build_motor(self) -> StepperMotor:

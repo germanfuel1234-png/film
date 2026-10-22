@@ -18,6 +18,15 @@ from ..vision.perforation_detection import SearchZone
 from ..vision.stabilization import ReferenceBox
 
 DEFAULT_CONFIG_PATH = Path(__file__).resolve().parents[2] / "config" / "hardware_config.json"
+PROJECT_ROOT = DEFAULT_CONFIG_PATH.parents[1]  # proyecto_film/
+
+
+def resolve_project_path(raw_path: str) -> Path:
+    """Resuelve una ruta de config/hardware_config.json: si es relativa
+    (ej. "assets/real_frames"), la toma relativa a la raíz del proyecto
+    (proyecto_film/), no al directorio desde donde se ejecutó Python."""
+    path = Path(raw_path).expanduser()
+    return path if path.is_absolute() else PROJECT_ROOT / path
 
 
 @dataclass
@@ -25,6 +34,11 @@ class CameraConfig:
     type: str = "simulated"
     industrial_cti_path: str = ""
     industrial_device_index: int = 0
+    # Carpeta de fotogramas que usa la cámara simulada ("" = la carpeta
+    # sintética por defecto de camera_simulated.py). Las imágenes acá
+    # tienen que coincidir en geometría con las zonas de calibration.*
+    # de abajo — si se cambia una, hay que recalibrar la otra.
+    simulated_sample_dir: str = ""
 
 
 @dataclass
@@ -90,6 +104,7 @@ def load_app_config(path: Path | str = DEFAULT_CONFIG_PATH) -> AppConfig:
         type=raw_camera.get("type", defaults.camera.type),
         industrial_cti_path=raw_camera.get("industrial_cti_path", defaults.camera.industrial_cti_path),
         industrial_device_index=raw_camera.get("industrial_device_index", defaults.camera.industrial_device_index),
+        simulated_sample_dir=raw_camera.get("simulated_sample_dir", defaults.camera.simulated_sample_dir),
     )
 
     raw_motor = raw.get("motor", {})
@@ -124,6 +139,7 @@ def config_to_dict(config: AppConfig) -> dict:
             "type": config.camera.type,
             "industrial_cti_path": config.camera.industrial_cti_path,
             "industrial_device_index": config.camera.industrial_device_index,
+            "simulated_sample_dir": config.camera.simulated_sample_dir,
         },
         "motor": {
             "mode": config.motor.mode,
