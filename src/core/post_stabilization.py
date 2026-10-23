@@ -57,6 +57,7 @@ def apply_improvement(
     left_zone: SearchZone,
     right_zone: SearchZone,
     reference_box: ReferenceBox,
+    ecc_zones: List[SearchZone] | None = None,
 ) -> List[ImprovedFrameResult]:
     """Recorre `storage.raw_dir` (ordenado), usa el PRIMER archivo como
     referencia fija (fotograma 0) y alinea el resto contra esa única
@@ -67,6 +68,12 @@ def apply_improvement(
     ABSOLUTA (recta ajustada por las perforaciones) y se lo endereza. Si
     no, toda la película hereda la inclinación con la que quedó esa
     primera toma — estable entre cuadros, pero torcida para el ojo.
+
+    `ecc_zones`: máscara para el refinamiento ECC — por defecto
+    `[left_zone, right_zone]` (solo perforaciones, lo que mejor funcionó
+    al medirlo); ver advertencia en
+    `vision/robust_registration.refine_alignment_with_ecc` antes de
+    ampliar esto.
     """
     raw_files = sorted(p for p in storage.raw_dir.iterdir() if p.is_file())
     if not raw_files:
@@ -104,7 +111,7 @@ def apply_improvement(
 
         perfs = detect_perforations(frame, left_zone, right_zone)
         alignment = compute_precise_alignment(
-            frame, reference_frame, perfs, reference_perfs, left_zone, right_zone
+            frame, reference_frame, perfs, reference_perfs, left_zone, right_zone, ecc_zones=ecc_zones
         )
         if alignment is None:
             results.append(

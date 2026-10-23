@@ -17,7 +17,7 @@ from src.vision.stabilization import ReferenceBox
 REAL_FRAMES = Path(__file__).resolve().parents[2] / "assets" / "real_frames"
 TOP_ZONE = SearchZone(x0=380, y0=0, x1=1600, y1=150)
 BOTTOM_ZONE = SearchZone(x0=380, y0=1015, x1=1600, y1=1080)
-REFERENCE_BOX = ReferenceBox(x0=700, y0=250, x1=1360, y1=1020)
+REFERENCE_BOX = ReferenceBox(x0=700, y0=0, x1=1360, y1=1020)  # incluye perforaciones + banda sonora (pedido del cliente)
 
 
 @pytest.fixture
@@ -97,18 +97,30 @@ def test_output_is_level_in_absolute_terms_not_just_consistent(project_storage_w
 
 def test_improved_frames_are_more_consistent_than_raw_crops(project_storage_with_all_real_frames):
     """Verificación visual objetiva: al PROMEDIAR todos los fotogramas, si
-    están bien alineados entre sí los bordes del cuadro (estructura fija
-    del celuloide) salen nítidos; si hay bamboleo salen borroneados. El
-    promedio de los fotogramas mejorados tiene que ser medible más nítido
-    que el de los recortes sin estabilizar."""
+    están bien alineados entre sí los bordes del contenido (nubes,
+    personaje) salen nítidos; si hay bamboleo salen borroneados.
+
+    Se mide solo sobre el área de CONTENIDO (sin perforaciones ni banda
+    sonora), aunque REFERENCE_BOX ahora las incluya: esa banda ya es
+    bastante nítida incluso sin alinear (diluye la comparación), mientras
+    que el contenido es justamente lo que se nota borroneado cuando hay
+    bamboleo — es la parte que de verdad demuestra si la estabilización
+    funciona."""
     import numpy as np
 
     storage = project_storage_with_all_real_frames
     results = apply_improvement(storage, TOP_ZONE, BOTTOM_ZONE, REFERENCE_BOX)
 
-    improved = [cv2.imread(str(r.output_path)) for r in results if r.output_path is not None]
+    # recorte de CONTENIDO dentro del fotograma mejorado (que ya viene con
+    # perfs+banda sonora arriba): mismo rango que el REFERENCE_BOX anterior
+    content_y0, content_y1 = 250, REFERENCE_BOX.y1
+
+    def content_only(img):
+        return img[content_y0:content_y1, :]
+
+    improved = [content_only(cv2.imread(str(r.output_path))) for r in results if r.output_path is not None]
     raw_crops = [
-        cv2.imread(str(p))[REFERENCE_BOX.y0 : REFERENCE_BOX.y1, REFERENCE_BOX.x0 : REFERENCE_BOX.x1]
+        content_only(cv2.imread(str(p))[REFERENCE_BOX.y0 : REFERENCE_BOX.y1, REFERENCE_BOX.x0 : REFERENCE_BOX.x1])
         for p in sorted(storage.raw_dir.iterdir())
     ]
 

@@ -180,15 +180,16 @@ def compose_affine(first: np.ndarray, second: np.ndarray) -> np.ndarray:
 def refine_alignment_with_ecc(
     frame_gray: np.ndarray,
     reference_gray: np.ndarray,
-    left_zone: SearchZone,
-    right_zone: SearchZone,
+    mask_zones: List[SearchZone],
     initial_matrix: np.ndarray | None = None,
     max_iterations: int = 50,
     epsilon: float = 1e-7,
     scale: float = 0.5,
 ) -> np.ndarray | None:
     """Refina la alineación con ECC (Enhanced Correlation Coefficient),
-    restringido a las BANDAS DE PERFORACIONES mediante una máscara.
+    restringido a `mask_zones` — estructura FÍSICA del celuloide que es
+    idéntica cuadro a cuadro (perforaciones), nunca al área de imagen (que
+    se mueve por diseño, es una película).
 
     Por qué esto además del ajuste por centroides de perforación: el
     detector de perforaciones ubica cada agujero con ruido de varios
@@ -196,17 +197,21 @@ def refine_alignment_with_ecc(
     medido entre perforaciones salía 118/197/181/125/170/191 px cuando
     físicamente es constante — o sea, los centroides individuales no son
     confiables al nivel de precisión que pide el cliente). ECC no depende
-    de ubicar puntos: correlaciona la IMAGEN completa de la banda, usando
-    toda la estructura (bordes de cada agujero, el borde del film, etc.),
-    y converge con precisión sub-píxel.
-
-    Se enmascara a las bandas de perforaciones a propósito: esa zona es
-    estructura FÍSICA del celuloide, idéntica cuadro a cuadro, mientras
-    que el área de imagen cambia (en una película el contenido se mueve
-    por diseño) y arrastraría la alineación si se la incluyera.
+    de ubicar puntos: correlaciona la IMAGEN completa de la zona, usando
+    toda la estructura (bordes de cada agujero), y converge con precisión
+    sub-píxel.
 
     Medido sobre las 36 fotos reales: el rango de giro entre fotogramas
-    baja de 1.39° (solo centroides) a 0.186° — unas 7.5 veces más estable.
+    baja de 1.39° (solo centroides) a 0.186° con máscara de perforaciones.
+
+    `mask_zones` admite ampliar la máscara más allá de las perforaciones
+    (ej. para incluir la banda sonora óptica, que tiene más detalle de
+    alta frecuencia) — se probó explícitamente y **empeoró** el resultado
+    (rango de giro subió a 0.48°, y en una corrida un fotograma divergió
+    por completo a 12.6°): esa zona tiene menos señal confiable (JPEG más
+    comprimido, patrón menos rígido respecto de las perforaciones de lo
+    esperado) y termina arrastrando el ajuste. Dejar `mask_zones` en solo
+    las perforaciones salvo que se vuelva a medir y confirme una mejora.
 
     Devuelve la matriz 2x3 que mapea `reference_gray` -> `frame_gray`, o
     None si ECC no converge (el llamador debe quedarse con la estimación
@@ -214,8 +219,8 @@ def refine_alignment_with_ecc(
     """
     # ECC se corre a media resolución por velocidad: medido sobre las 36
     # fotos reales, baja de ~1750 ms a ~274 ms por fotograma perdiendo
-    # apenas precisión (rango de giro 0.166° vs 0.160°). Para un rollo de
-    # 3000 fotogramas es la diferencia entre ~1.5 h y ~14 min.
+    # apenas precisión. Para un rollo de 3000 fotogramas es la diferencia
+    # entre ~1.5 h y ~14 min.
     if scale != 1.0:
         reference_small = cv2.resize(reference_gray, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
         frame_small = cv2.resize(frame_gray, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
@@ -223,7 +228,7 @@ def refine_alignment_with_ecc(
         reference_small, frame_small = reference_gray, frame_gray
 
     mask = np.zeros(reference_small.shape, dtype=np.uint8)
-    for zone in (left_zone, right_zone):
+    for zone in mask_zones:
         y0 = max(0, int(zone.y0 * scale))
         y1 = min(reference_small.shape[0], int(zone.y1 * scale))
         x0 = max(0, int(zone.x0 * scale))
@@ -261,11 +266,22 @@ def compute_precise_alignment(
     reference_perforations: List[Perforation],
     left_zone: SearchZone,
     right_zone: SearchZone,
+    ecc_zones: List[SearchZone] | None = None,
 ) -> RobustAlignment | None:
     """Alineación en dos etapas: primero una estimación robusta por
     perforaciones (tolera desplazamientos grandes, da un punto de partida
-    confiable) y después refinamiento sub-píxel con ECC sobre la banda de
-    perforaciones. Es la que usa el botón "Aplicar mejora".
+    confiable) y después refinamiento sub-píxel con ECC. Es la que usa el
+    botón "Aplicar mejora".
+
+    `ecc_zones` es la máscara que usa ECC para el refinamiento — por
+    defecto son las mismas zonas de detección de perforaciones
+    (`left_zone`, `right_zone`). Pasar algo distinto NO afecta la
+    detección de perforaciones en sí (que sigue usando `left_zone`/
+    `right_zone` tal cual, pensadas para encontrar los agujeros). Ver la
+    advertencia en `refine_alignment_with_ecc`: ampliar esta máscara para
+    incluir la banda sonora óptica se probó explícitamente y empeoró el
+    resultado — dejar en default salvo que se vuelva a medir y confirme
+    una mejora real.
     """
     coarse = compute_robust_alignment(perforations, reference_perforations)
 
@@ -275,7 +291,8 @@ def compute_precise_alignment(
     # ECC estima reference -> frame; para corregir el fotograma necesitamos
     # la inversa (frame -> reference), igual que devuelve la etapa gruesa.
     initial = cv2.invertAffineTransform(coarse.matrix) if coarse is not None else None
-    refined = refine_alignment_with_ecc(frame_gray, reference_gray, left_zone, right_zone, initial)
+    zones = ecc_zones if ecc_zones is not None else [left_zone, right_zone]
+    refined = refine_alignment_with_ecc(frame_gray, reference_gray, zones, initial)
 
     if refined is None:
         return coarse  # sin refinamiento: nos quedamos con lo que haya dado la etapa gruesa

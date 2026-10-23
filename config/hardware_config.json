@@ -15,7 +15,7 @@
     "film_format": "35mm",
     "search_zone_left": { "x0": 380, "y0": 0, "x1": 1600, "y1": 150 },
     "search_zone_right": { "x0": 380, "y0": 1015, "x1": 1600, "y1": 1080 },
-    "reference_box": { "x0": 700, "y0": 250, "x1": 1360, "y1": 1020 }
+    "reference_box": { "x0": 700, "y0": 0, "x1": 1360, "y1": 1020 }
   },
   "projects_root": "~/FILMS/projects"
 }
