@@ -60,6 +60,14 @@ class MainWindow(QMainWindow):
         self.setStatusBar(status)
         status.showMessage(f"Listo · v{APP_VERSION}")
 
+        credit_label = QLabel(
+            '<a href="https://germanrodriguez.ar/" style="color:#7aa2f7; text-decoration:none;">'
+            "Hecho y diseñado por <b>German Rodríguez</b></a>"
+        )
+        credit_label.setOpenExternalLinks(True)
+        credit_label.setStyleSheet("font-family: Georgia, 'Times New Roman', serif; font-style: italic; padding: 2px 10px;")
+        status.addPermanentWidget(credit_label)
+
     def _on_tab_changed(self, index: int) -> None:
         # La pestaña "Resultados" lee del disco cada vez que se vuelve a
         # mostrar, para reflejar fotogramas procesados en la pestaña "Escaneo".
