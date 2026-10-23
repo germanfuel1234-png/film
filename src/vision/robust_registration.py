@@ -318,3 +318,23 @@ def apply_robust_alignment(frame: np.ndarray, matrix: np.ndarray, reference_box:
     h, w = frame.shape[:2]
     warped = cv2.warpAffine(frame, matrix, (w, h), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
     return warped[reference_box.y0 : reference_box.y1, reference_box.x0 : reference_box.x1]
+
+
+def rotate_output(image: np.ndarray, degrees: int) -> np.ndarray:
+    """Rota el fotograma final en incrementos de 90° (antihorario).
+
+    La cámara suele capturar el film "de costado": en las fotos reales
+    del cliente las perforaciones quedan arriba/abajo con varios cuadros
+    uno al lado del otro, en vez de a los lados con un cuadro por imagen
+    como se ve normalmente una película. Rotar 90° antihorario pone cada
+    cuadro en la orientación de lectura normal (confirmado visualmente
+    contra el video de referencia que mandó el cliente).
+    """
+    degrees = degrees % 360
+    if degrees == 90:
+        return cv2.rotate(image, cv2.ROTATE_90_COUNTERCLOCKWISE)
+    if degrees == 180:
+        return cv2.rotate(image, cv2.ROTATE_180)
+    if degrees == 270:
+        return cv2.rotate(image, cv2.ROTATE_90_CLOCKWISE)
+    return image

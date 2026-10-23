@@ -169,3 +169,17 @@ def test_apply_improvement_on_empty_project_returns_empty_list(tmp_path):
     storage = ProjectStorage(tmp_path / "proyecto_vacio")
     results = apply_improvement(storage, TOP_ZONE, BOTTOM_ZONE, REFERENCE_BOX)
     assert results == []
+
+
+def test_apply_improvement_with_rotation_swaps_output_dimensions(project_storage_with_real_frames):
+    """Pedido del cliente: presentar cada fotograma en orientación de
+    lectura normal (no "de costado" como lo capturó la cámara). Con
+    rotation_deg=90 el ancho y alto del recorte final tienen que
+    intercambiarse respecto del REFERENCE_BOX original."""
+    results = apply_improvement(project_storage_with_real_frames, TOP_ZONE, BOTTOM_ZONE, REFERENCE_BOX, rotation_deg=90)
+    ok = [r for r in results if r.output_path is not None]
+    assert ok
+    for r in ok:
+        img = cv2.imread(str(r.output_path))
+        assert img.shape[0] == REFERENCE_BOX.width
+        assert img.shape[1] == REFERENCE_BOX.height

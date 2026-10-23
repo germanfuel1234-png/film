@@ -27,6 +27,7 @@ from ..vision.robust_registration import (
     build_straightening_matrix,
     compute_precise_alignment,
     measure_absolute_tilt,
+    rotate_output,
 )
 from ..vision.stabilization import ReferenceBox
 
@@ -58,6 +59,7 @@ def apply_improvement(
     right_zone: SearchZone,
     reference_box: ReferenceBox,
     ecc_zones: List[SearchZone] | None = None,
+    rotation_deg: int = 0,
 ) -> List[ImprovedFrameResult]:
     """Recorre `storage.raw_dir` (ordenado), usa el PRIMER archivo como
     referencia fija (fotograma 0) y alinea el resto contra esa única
@@ -74,6 +76,11 @@ def apply_improvement(
     al medirlo); ver advertencia en
     `vision/robust_registration.refine_alignment_with_ecc` antes de
     ampliar esto.
+
+    `rotation_deg`: rotación final (múltiplo de 90°, antihoraria) para
+    presentar el fotograma en orientación de lectura normal — ver
+    `vision/robust_registration.rotate_output`. Se aplica DESPUÉS del
+    recorte/alineación, como último paso antes de guardar.
     """
     raw_files = sorted(p for p in storage.raw_dir.iterdir() if p.is_file())
     if not raw_files:
@@ -127,6 +134,8 @@ def apply_improvement(
             continue
 
         improved = apply_robust_alignment(frame, alignment.matrix, reference_box)
+        if rotation_deg % 360 != 0:
+            improved = rotate_output(improved, rotation_deg)
         output_path = output_dir / f"frame_{frame_index:05d}_mejorado.png"
         cv2.imwrite(str(output_path), improved)
         results.append(ImprovedFrameResult(frame_index, raw_path, output_path, alignment, None, tilt))

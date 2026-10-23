@@ -163,6 +163,11 @@ class SettingsTab(QWidget):
         self.right_zone_spins = _zone_row(form, "Zona derecha", SearchZone(0, 0, 0, 0))
         self.reference_box_spins = _zone_row(form, "Encuadre de referencia", ReferenceBox(0, 0, 0, 0))
 
+        self.rotation_spin = QSpinBox()
+        self.rotation_spin.setRange(0, 270)
+        self.rotation_spin.setSingleStep(90)
+        form.addRow("Rotación antihoraria por defecto [°]", self.rotation_spin)
+
         return box
 
     def _build_storage_box(self) -> QGroupBox:
@@ -251,6 +256,7 @@ class SettingsTab(QWidget):
             ),
         ):
             self.reference_box_spins[label].setValue(value)
+        self.rotation_spin.setValue(config.calibration.rotation_deg)
 
         self.projects_root_edit.setText(config.projects_root)
 
@@ -273,6 +279,7 @@ class SettingsTab(QWidget):
                 search_zone_left=_zone_from_spins(self.left_zone_spins, SearchZone),
                 search_zone_right=_zone_from_spins(self.right_zone_spins, SearchZone),
                 reference_box=_zone_from_spins(self.reference_box_spins, ReferenceBox),
+                rotation_deg=self.rotation_spin.value(),
             ),
             projects_root=self.projects_root_edit.text().strip() or "~/FILMS/projects",
         )

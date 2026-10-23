@@ -26,6 +26,13 @@ class CalibrationState:
     reference_pair: Optional[tuple[Perforation, Perforation]] = None  # "Referencia 1"
     reference_pair_2: Optional[tuple[Perforation, Perforation]] = None  # "Referencia 2"
     motor_steps_since_reset: int = 0
+    # Rotación antihoraria aplicada al fotograma final (0/90/180/270): la
+    # cámara suele capturar el film "de costado" (perforaciones
+    # arriba/abajo en vez de a los lados), así que hace falta rotar para
+    # presentarlo en la orientación de lectura normal — ya estaba previsto
+    # en la UI ("Rotación antihoraria" en la pestaña Entrada) pero no se
+    # aplicaba a nada.
+    output_rotation_deg: int = 0
 
 
 class Calibrator:
@@ -45,6 +52,11 @@ class Calibrator:
 
     def set_reference_box(self, box: ReferenceBox) -> None:
         self.state.reference_box = box
+
+    def set_output_rotation(self, degrees: int) -> None:
+        if degrees % 90 != 0:
+            raise ValueError(f"La rotación tiene que ser múltiplo de 90° (recibido: {degrees})")
+        self.state.output_rotation_deg = degrees % 360
 
     def mark_reference(self, slot: int, frame) -> tuple[Perforation, Perforation]:
         """Detecta perforaciones en el fotograma actual y las guarda como

@@ -55,7 +55,17 @@ class InputTab(QWidget):
         self.rotation_spin = QSpinBox()
         self.rotation_spin.setRange(0, 270)
         self.rotation_spin.setSingleStep(90)
+        self.rotation_spin.setValue(ctx.config.calibration.rotation_deg)
         form.addRow("Rotación antihoraria [°]", self.rotation_spin)
+
+        rotation_button = QPushButton("Aplicar rotación")
+        rotation_button.setToolTip(
+            "La cámara suele capturar el film de costado (perforaciones arriba/abajo); esta\n"
+            "rotación se aplica al exportar con 'Aplicar mejora' para que cada fotograma quede\n"
+            "en la orientación de lectura normal, como una tira de película real."
+        )
+        rotation_button.clicked.connect(self._apply_rotation)
+        form.addRow(rotation_button)
 
         ref_defaults = ctx.config.calibration.reference_box
         self.x0_spin = self._make_spin(default=ref_defaults.x0)
@@ -85,6 +95,10 @@ class InputTab(QWidget):
         self.y0_spin.setValue(box.y0)
         self.x1_spin.setValue(box.x1)
         self.y1_spin.setValue(box.y1)
+        self.rotation_spin.setValue(self._ctx.config.calibration.rotation_deg)
+
+    def _apply_rotation(self) -> None:
+        self._ctx.calibrator.set_output_rotation(self.rotation_spin.value())
 
     def _make_spin(self, default: int = 0) -> QSpinBox:
         spin = QSpinBox()

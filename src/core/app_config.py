@@ -55,6 +55,9 @@ class CalibrationDefaults:
     search_zone_left: SearchZone = field(default_factory=lambda: SearchZone(10, 100, 110, 1200))
     search_zone_right: SearchZone = field(default_factory=lambda: SearchZone(760, 100, 860, 1200))
     reference_box: ReferenceBox = field(default_factory=lambda: ReferenceBox(220, 120, 680, 1180))
+    # Rotación antihoraria por defecto (0/90/180/270) — ver
+    # Calibrator.set_output_rotation en core/calibration.py.
+    rotation_deg: int = 0
 
 
 @dataclass
@@ -121,6 +124,7 @@ def load_app_config(path: Path | str = DEFAULT_CONFIG_PATH) -> AppConfig:
         search_zone_left=_zone(raw_calib.get("search_zone_left", {}), defaults.calibration.search_zone_left),
         search_zone_right=_zone(raw_calib.get("search_zone_right", {}), defaults.calibration.search_zone_right),
         reference_box=_reference_box(raw_calib.get("reference_box", {}), defaults.calibration.reference_box),
+        rotation_deg=raw_calib.get("rotation_deg", defaults.calibration.rotation_deg),
     )
 
     projects_root = raw.get("projects_root", defaults.projects_root)
@@ -152,6 +156,7 @@ def config_to_dict(config: AppConfig) -> dict:
             "search_zone_left": _zone_to_dict(config.calibration.search_zone_left),
             "search_zone_right": _zone_to_dict(config.calibration.search_zone_right),
             "reference_box": _zone_to_dict(config.calibration.reference_box),
+            "rotation_deg": config.calibration.rotation_deg,
         },
         "projects_root": config.projects_root,
     }

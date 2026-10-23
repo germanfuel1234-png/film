@@ -2,8 +2,15 @@ from pathlib import Path
 
 import cv2
 
+import numpy as np
+
 from src.vision.perforation_detection import SearchZone, detect_perforations
-from src.vision.robust_registration import apply_robust_alignment, compute_robust_alignment, match_all_perforations
+from src.vision.robust_registration import (
+    apply_robust_alignment,
+    compute_robust_alignment,
+    match_all_perforations,
+    rotate_output,
+)
 from src.vision.stabilization import ReferenceBox
 
 ASSETS = Path(__file__).resolve().parents[2] / "assets" / "sample_frames"
@@ -84,3 +91,36 @@ def test_compute_robust_alignment_returns_none_with_too_few_points():
 
     one_point = [Perforation(cx=10, cy=10, area=1.0, zone="left")]
     assert compute_robust_alignment(one_point, one_point) is None
+
+
+def test_rotate_output_zero_degrees_is_identity():
+    image = np.arange(60, dtype="uint8").reshape(5, 4, 3)[:, :, :1].repeat(3, axis=2)
+    rotated = rotate_output(image, 0)
+    assert np.array_equal(rotated, image)
+    assert rotate_output(image, 360) is image or np.array_equal(rotate_output(image, 360), image)
+
+
+def test_rotate_output_90_swaps_dimensions_and_rotates_counterclockwise():
+    # imagen 2x3 (alto x ancho) con un píxel marcado arriba a la derecha
+    image = np.zeros((2, 3, 3), dtype="uint8")
+    image[0, 2] = (255, 255, 255)
+
+    rotated = rotate_output(image, 90)
+    assert rotated.shape == (3, 2, 3)  # alto y ancho se intercambian
+    # rotación antihoraria: la esquina arriba-derecha termina en la esquina arriba-izquierda
+    assert tuple(rotated[0, 0]) == (255, 255, 255)
+
+
+def test_rotate_output_180_flips_both_axes():
+    image = np.zeros((2, 3, 3), dtype="uint8")
+    image[0, 0] = (255, 255, 255)
+
+    rotated = rotate_output(image, 180)
+    assert rotated.shape == image.shape
+    assert tuple(rotated[1, 2]) == (255, 255, 255)
+
+
+def test_rotate_output_270_is_inverse_of_90():
+    image = np.random.default_rng(0).integers(0, 255, size=(4, 6, 3), dtype="uint8")
+    roundtrip = rotate_output(rotate_output(image, 90), 270)
+    assert np.array_equal(roundtrip, image)

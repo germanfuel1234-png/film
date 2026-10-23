@@ -26,7 +26,8 @@ Se lee al arrancar el programa (`main.py`). Si algún valor falta o el archivo t
     "film_format": "35mm",
     "search_zone_left": { "x0": 380, "y0": 0, "x1": 1600, "y1": 150 },
     "search_zone_right": { "x0": 380, "y0": 1015, "x1": 1600, "y1": 1080 },
-    "reference_box": { "x0": 700, "y0": 250, "x1": 1360, "y1": 1020 }
+    "reference_box": { "x0": 700, "y0": 250, "x1": 1360, "y1": 1020 },
+    "rotation_deg": 90
   },
   "projects_root": "~/FILMS/projects"
 }
@@ -47,6 +48,7 @@ Se lee al arrancar el programa (`main.py`). Si algún valor falta o el archivo t
 | `calibration.film_format` | `"35mm"` o `"16mm"`. | El tipo de rollo que van a escanear. |
 | `calibration.search_zone_left` / `search_zone_right` | Rectángulo (`x0,y0,x1,y1` en píxeles de la imagen de la cámara) donde el sistema busca las perforaciones. Los nombres son "left/right" pero en las fotos reales del cliente las perforaciones están arriba/abajo (orientación horizontal) — las zonas funcionan igual, solo cambia qué representan geométricamente. Los valores por defecto están **validados contra las fotos reales en `assets/real_frames/`** (no son sintéticos); igual van a necesitar recalibrarse una vez conectada la cámara industrial definitiva, porque esas fotos se sacaron con una Canon de prueba a otra resolución/encuadre. | Se determina mirando el preview real de la cámara, una vez conectada (pestaña "Perforaciones" → "Probar detección" para confirmar visualmente). |
 | `calibration.reference_box` | El recorte final (encuadre) que se guarda por cada fotograma, en píxeles de la imagen de la cámara. También depende de la cámara/lente real. | Igual que las zonas de búsqueda. |
+| `calibration.rotation_deg` | Rotación antihoraria aplicada al fotograma final al usar "Aplicar mejora" (`0`, `90`, `180` o `270`). La cámara suele capturar el film de costado (perforaciones arriba/abajo); `90` lo pone en orientación de lectura normal, como una tira de película real — confirmado contra el video de referencia del cliente. También editable desde la pestaña "Entrada" (botón "Aplicar rotación") sin tocar este archivo. | Se determina mirando el preview: si las perforaciones quedan arriba/abajo en vez de a los costados, hace falta rotar. |
 | `projects_root` | Carpeta donde se guardan los proyectos escaneados. `~` se expande a la carpeta del usuario. | Dónde quieran que se guarden los archivos (ojo con el espacio en disco: son RAW/DNG, pesan). |
 
 ### Por qué existe este archivo

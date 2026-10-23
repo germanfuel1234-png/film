@@ -112,6 +112,7 @@ class AppContext(QObject):
         self.calibrator.set_film_format(new_config.calibration.film_format)
         self.calibrator.set_search_zones(new_config.calibration.search_zone_left, new_config.calibration.search_zone_right)
         self.calibrator.set_reference_box(new_config.calibration.reference_box)
+        self.calibrator.set_output_rotation(new_config.calibration.rotation_deg)
 
         self.set_camera(new_config.camera.type, **self._camera_kwargs(new_config.camera.type))
         self.motor = self._build_motor()

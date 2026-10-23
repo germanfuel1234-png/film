@@ -87,7 +87,13 @@ class ResultsTab(QWidget):
         QApplication.processEvents()  # que se vea el mensaje antes de bloquear con el procesamiento
 
         try:
-            results = apply_improvement(self._ctx.storage, calib.left_zone, calib.right_zone, calib.reference_box)
+            results = apply_improvement(
+                self._ctx.storage,
+                calib.left_zone,
+                calib.right_zone,
+                calib.reference_box,
+                rotation_deg=calib.output_rotation_deg,
+            )
         finally:
             self.improve_button.setEnabled(True)
 
