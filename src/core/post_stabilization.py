@@ -21,7 +21,7 @@ import cv2
 
 from ..storage.raw_dng_writer import ProjectStorage
 from ..vision.perforation_detection import SearchZone, detect_perforations
-from ..vision.robust_registration import RobustAlignment, apply_robust_alignment, compute_robust_alignment
+from ..vision.robust_registration import RobustAlignment, apply_robust_alignment, compute_precise_alignment
 from ..vision.stabilization import ReferenceBox
 
 OUTPUT_DIR_NAME = "mejorado"
@@ -76,7 +76,9 @@ def apply_improvement(
             continue
 
         perfs = detect_perforations(frame, left_zone, right_zone)
-        alignment = compute_robust_alignment(perfs, reference_perfs)
+        alignment = compute_precise_alignment(
+            frame, reference_frame, perfs, reference_perfs, left_zone, right_zone
+        )
         if alignment is None:
             results.append(
                 ImprovedFrameResult(

@@ -44,15 +44,45 @@ def test_apply_improvement_keeps_rotation_bounded_on_all_36_real_frames(project_
     """El caso real que reportó el cliente: con el método de un solo par
     de perforaciones, el ángulo estimado sobre estas 36 fotos variaba
     entre -3.3° y +6.0° (se nota como "giro" al reproducir la secuencia).
-    Con el registro robusto (todas las perforaciones + RANSAC) tiene que
-    quedar en un rango mucho más chico."""
+
+    Evolución medida sobre este mismo material:
+      - 1 par de perforaciones:            rango 9.3°
+      - todas las perforaciones + RANSAC:  rango 1.39°
+      - + refinamiento ECC (actual):       rango 0.18°
+    El umbral de 0.5° deja margen de variación pero falla si alguien
+    rompe el refinamiento ECC y volvemos al nivel anterior.
+    """
     results = apply_improvement(project_storage_with_all_real_frames, TOP_ZONE, BOTTOM_ZONE, REFERENCE_BOX)
     assert len(results) >= 30
     assert all(r.error is None for r in results)
 
     angles = [r.alignment.angle_deg for r in results if r.alignment is not None]
-    assert max(angles) - min(angles) < 2.0
-    assert max(abs(a) for a in angles) < 1.5
+    assert max(angles) - min(angles) < 0.5
+    assert max(abs(a) for a in angles) < 0.5
+
+
+def test_improved_frames_are_more_consistent_than_raw_crops(project_storage_with_all_real_frames):
+    """Verificación visual objetiva: al PROMEDIAR todos los fotogramas, si
+    están bien alineados entre sí los bordes del cuadro (estructura fija
+    del celuloide) salen nítidos; si hay bamboleo salen borroneados. El
+    promedio de los fotogramas mejorados tiene que ser medible más nítido
+    que el de los recortes sin estabilizar."""
+    import numpy as np
+
+    storage = project_storage_with_all_real_frames
+    results = apply_improvement(storage, TOP_ZONE, BOTTOM_ZONE, REFERENCE_BOX)
+
+    improved = [cv2.imread(str(r.output_path)) for r in results if r.output_path is not None]
+    raw_crops = [
+        cv2.imread(str(p))[REFERENCE_BOX.y0 : REFERENCE_BOX.y1, REFERENCE_BOX.x0 : REFERENCE_BOX.x1]
+        for p in sorted(storage.raw_dir.iterdir())
+    ]
+
+    def average_sharpness(images):
+        avg = np.mean([im.astype(np.float32) for im in images], axis=0).astype(np.uint8)
+        return cv2.Laplacian(cv2.cvtColor(avg, cv2.COLOR_BGR2GRAY), cv2.CV_64F).var()
+
+    assert average_sharpness(improved) > average_sharpness(raw_crops) * 1.2
 
 
 def test_apply_improvement_processes_every_frame_without_errors(project_storage_with_real_frames):
