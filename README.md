@@ -10,7 +10,7 @@ python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 .venv/bin/python main.py                    # abre la app en modo simulado (cámara + motor simulados)
 .venv/bin/python scripts/demo_simulation.py # demo por consola: corre el ciclo completo sin UI
-.venv/bin/python -m pytest tests/           # 25 tests: unitarios + integración + fotos reales del cliente
+.venv/bin/python -m pytest tests/           # 37 tests: unitarios + integración + fotos reales del cliente
 ```
 
 Guía paso a paso de la UI: [`GUIA_USO.md`](GUIA_USO.md). Parámetros editables para conectar hardware real: [`config/hardware_config.json`](config/README.md).
@@ -37,12 +37,14 @@ proyecto_film/
 │   │   └── motor/                Control del motor paso a paso (Arduino, pyserial)
 │   ├── vision/                Visión por computadora (OpenCV, funcional)
 │   │   ├── perforation_detection.py  Detección de perforaciones por zonas de búsqueda
-│   │   └── stabilization.py          Offset X/Y/rotación + crop & match
+│   │   ├── stabilization.py          Offset X/Y/rotación + crop & match (1 par de perforaciones)
+│   │   └── robust_registration.py    Registro robusto contra fotograma 0 fijo (TODAS las perforaciones + RANSAC)
 │   ├── core/                  Orquestación y lógica de negocio
-│   │   ├── scan_controller.py    Máquina de estados del ciclo de escaneo
-│   │   ├── project_manager.py    Alta/apertura/export de proyectos
-│   │   ├── calibration.py        Flujo de calibración y zonas de búsqueda
-│   │   └── app_config.py         Carga/guarda config/hardware_config.json
+│   │   ├── scan_controller.py      Máquina de estados del ciclo de escaneo
+│   │   ├── post_stabilization.py   Pipeline de "Aplicar mejora" (botón en Resultados)
+│   │   ├── project_manager.py      Alta/apertura/export de proyectos
+│   │   ├── calibration.py          Flujo de calibración y zonas de búsqueda
+│   │   └── app_config.py           Carga/guarda config/hardware_config.json
 │   ├── storage/
 │   │   └── raw_dng_writer.py  Escritura RAW/DNG no destructiva, manifiesto SHA-256
 │   └── ui/desktop_app/        Interfaz PySide6 (7 pestañas del prototipo + "Ajustes")

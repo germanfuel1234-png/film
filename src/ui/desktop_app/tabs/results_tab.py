@@ -11,6 +11,7 @@ import cv2
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
+from ....core.post_stabilization import apply_improvement
 from ....vision.stabilization import AlignmentResult, ReferenceBox, apply_crop
 from ..app_context import AppContext
 from ..image_utils import frame_to_pixmap
@@ -50,6 +51,63 @@ class ResultsTab(QWidget):
         images_row.addWidget(self.before_label)
         images_row.addWidget(self.after_label)
         root.addLayout(images_row)
+
+        improve_row = QHBoxLayout()
+        self.improve_button = QPushButton("Aplicar mejora")
+        self.improve_button.setToolTip(
+            "Recalibra TODOS los fotogramas del proyecto contra el fotograma 0 (fijo), usando\n"
+            "todas las perforaciones detectadas con ajuste robusto (RANSAC) en vez de un único\n"
+            "par. Guarda el resultado en una carpeta nueva 'mejorado/' dentro del proyecto,\n"
+            "sin tocar los originales en 'raw/'."
+        )
+        self.improve_button.clicked.connect(self._apply_improvement)
+        improve_row.addWidget(self.improve_button)
+        root.addLayout(improve_row)
+
+        self.improve_status_label = QLabel("")
+        self.improve_status_label.setWordWrap(True)
+        root.addWidget(self.improve_status_label)
+
+    def _apply_improvement(self) -> None:
+        if self._ctx.storage is None:
+            self.improve_status_label.setText("No hay proyecto activo.")
+            return
+        calib = self._ctx.calibrator.state
+        if calib.left_zone is None or calib.right_zone is None or calib.reference_box is None:
+            self.improve_status_label.setText(
+                "Faltan zonas de búsqueda o encuadre de referencia (pestañas 'Configuración'/'Entrada')."
+            )
+            return
+
+        self.improve_button.setEnabled(False)
+        self.improve_status_label.setText("Aplicando mejora, un momento...")
+        from PySide6.QtWidgets import QApplication
+
+        QApplication.processEvents()  # que se vea el mensaje antes de bloquear con el procesamiento
+
+        try:
+            results = apply_improvement(self._ctx.storage, calib.left_zone, calib.right_zone, calib.reference_box)
+        finally:
+            self.improve_button.setEnabled(True)
+
+        if not results:
+            self.improve_status_label.setText("No hay fotogramas guardados en este proyecto para mejorar.")
+            return
+
+        ok = [r for r in results if r.error is None]
+        errors = [r for r in results if r.error is not None]
+        angles = [r.alignment.angle_deg for r in ok if r.alignment is not None]
+        rango_angulo = f" · giro entre {min(angles):+.2f}° y {max(angles):+.2f}°" if angles else ""
+
+        texto = (
+            f"Mejora aplicada: {len(ok)}/{len(results)} fotogramas guardados en "
+            f"{self._ctx.storage.project_dir / 'mejorado'}{rango_angulo}."
+        )
+        if errors:
+            texto += f"\n⚠ {len(errors)} fotograma(s) con error: " + ", ".join(
+                f"{r.source_path.name} ({r.error})" for r in errors[:5]
+            )
+        self.improve_status_label.setText(texto)
 
     def _reload_index(self) -> None:
         if self._ctx.storage is None:

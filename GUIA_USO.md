@@ -84,6 +84,7 @@ Las pestañas "Entrada", "Configuración" y "Calibración" siguen permitiendo aj
 1. Tocá **Actualizar lista** para cargar los fotogramas ya guardados del proyecto activo.
 2. Navegá con **← Anterior / Siguiente →**: se ve el recorte **ANTES** (sin estabilizar) y **DESPUÉS** (alineado), con el desplazamiento X/Y, el giro y el residuo (cuanto más bajo, mejor el ajuste).
 3. Nota: si la cámara real guarda RAW/DNG de verdad (no los `.sim.png` del modo simulado), hace falta instalar `rawpy` para poder previsualizarlo acá — sin eso, la pestaña avisa que no puede decodificar el archivo, pero el archivo RAW queda guardado igual.
+4. **Aplicar mejora** (botón al final de la pestaña): recalcula la alineación de **todos** los fotogramas del proyecto contra el fotograma 0 (fijo), usando **todas** las perforaciones detectadas con ajuste robusto (RANSAC) en vez de un único par — pedido explícito del cliente, porque el método normal (un par de perforaciones por fotograma) daba algo de "giro" entre cuadros al reproducir la secuencia completa. Guarda el resultado en una carpeta nueva `mejorado/` **dentro del proyecto** (ej. `frame_00005_mejorado.png`), sin tocar los originales en `raw/`. Validado contra las 36 fotos reales del cliente: el rango de giro entre fotogramas bajó de -3.3°/+6.0° a -0.84°/+0.55°.
 
 ### 4.7 Pestaña "Prueba y ayuda"
 Resumen rápido de estos mismos pasos, dentro del programa.
