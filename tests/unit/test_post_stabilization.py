@@ -61,6 +61,40 @@ def test_apply_improvement_keeps_rotation_bounded_on_all_36_real_frames(project_
     assert max(abs(a) for a in angles) < 0.5
 
 
+def test_output_is_level_in_absolute_terms_not_just_consistent(project_storage_with_all_real_frames):
+    """El fotograma 0 de las fotos reales viene inclinado -0.241°. Si solo
+    alineáramos todo contra él, la secuencia quedaría consistente entre
+    cuadros pero TORCIDA para el ojo. Este test verifica el cero absoluto:
+    tras corregir, la inclinación real del film (recta por las
+    perforaciones) tiene que quedar prácticamente en 0."""
+    import numpy as np
+
+    from src.vision.perforation_detection import detect_perforations
+    from src.vision.robust_registration import measure_absolute_tilt
+
+    storage = project_storage_with_all_real_frames
+    results = apply_improvement(storage, TOP_ZONE, BOTTOM_ZONE, REFERENCE_BOX)
+    ok = [r for r in results if r.error is None and r.alignment is not None]
+
+    original_tilt = results[0].reference_tilt_corrected_deg
+    assert original_tilt is not None
+    assert abs(original_tilt) > 0.1, "se esperaba que el fotograma 0 original estuviera inclinado"
+
+    tilts = []
+    for r in ok:
+        img = cv2.imread(str(r.source_path))
+        height, width = img.shape[:2]
+        warped = cv2.warpAffine(
+            img, r.alignment.matrix, (width, height), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE
+        )
+        tilt = measure_absolute_tilt(detect_perforations(warped, TOP_ZONE, BOTTOM_ZONE))
+        if tilt is not None:
+            tilts.append(tilt)
+
+    assert tilts
+    assert abs(float(np.mean(tilts))) < 0.05, "la secuencia corregida no quedó recta en términos absolutos"
+
+
 def test_improved_frames_are_more_consistent_than_raw_crops(project_storage_with_all_real_frames):
     """Verificación visual objetiva: al PROMEDIAR todos los fotogramas, si
     están bien alineados entre sí los bordes del cuadro (estructura fija

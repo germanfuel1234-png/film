@@ -100,9 +100,17 @@ class ResultsTab(QWidget):
         angles = [r.alignment.angle_deg for r in ok if r.alignment is not None]
         rango_angulo = f" · giro entre {min(angles):+.2f}° y {max(angles):+.2f}°" if angles else ""
 
+        tilt = next((r.reference_tilt_corrected_deg for r in results if r.reference_tilt_corrected_deg is not None), None)
+        enderezado = (
+            f"\nCero absoluto: el fotograma 0 venía inclinado {tilt:+.3f}° y se enderezó, "
+            "así que toda la secuencia queda recta para el ojo (no solo consistente entre cuadros)."
+            if tilt is not None
+            else ""
+        )
+
         texto = (
             f"Mejora aplicada: {len(ok)}/{len(results)} fotogramas guardados en "
-            f"{self._ctx.storage.project_dir / 'mejorado'}{rango_angulo}."
+            f"{self._ctx.storage.project_dir / 'mejorado'}{rango_angulo}.{enderezado}"
         )
         if errors:
             texto += f"\n⚠ {len(errors)} fotograma(s) con error: " + ", ".join(

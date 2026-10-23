@@ -123,6 +123,60 @@ def compute_robust_alignment(
     )
 
 
+def measure_absolute_tilt(
+    perforations: List[Perforation],
+    min_points_per_band: int = 3,
+) -> float | None:
+    """Ángulo ABSOLUTO del film respecto a la horizontal real, ajustando
+    una recta por las perforaciones de cada banda.
+
+    Por qué hace falta: alinear todo contra el fotograma 0 deja la
+    secuencia consistente entre cuadros, pero si el fotograma 0 está
+    torcido, TODA la película hereda esa inclinación — queda estable pero
+    chueca para el ojo. Esto define el cero verdadero: las perforaciones
+    están troqueladas en línea recta a lo largo del celuloide, así que la
+    recta que pasa por ellas ES la horizontal del film.
+
+    Medido sobre las fotos reales del cliente, el fotograma 0 está
+    inclinado -0.241°, y la dispersión perpendicular de las perforaciones
+    respecto de la recta ajustada es menor a 1 px — o sea que el ángulo
+    sale confiable aunque el espaciado entre perforaciones tenga ruido
+    (ese ruido es a lo largo de la recta, no perpendicular a ella).
+
+    Devuelve el ángulo en grados (positivo = film rotado antihorario), o
+    None si no hay suficientes perforaciones para ajustar una recta.
+    """
+    angles: List[float] = []
+    for zone_name in {p.zone for p in perforations}:
+        points = np.array([[p.cx, p.cy] for p in perforations if p.zone == zone_name], dtype=np.float32)
+        if len(points) < min_points_per_band:
+            continue
+        vx, vy, _, _ = cv2.fitLine(points, cv2.DIST_HUBER, 0, 0.01, 0.01).ravel()
+        # DIST_HUBER pondera a la baja los puntos lejanos: una perforación
+        # mal detectada no arrastra el ángulo de toda la recta.
+        angles.append(math.degrees(math.atan2(float(vy), float(vx))))
+
+    if not angles:
+        return None
+    return float(np.mean(angles))
+
+
+def build_straightening_matrix(tilt_deg: float, image_shape: tuple[int, int]) -> np.ndarray:
+    """Matriz 2x3 que rota la imagen `tilt_deg` grados alrededor de su
+    centro para dejarla recta (cero absoluto)."""
+    height, width = image_shape[:2]
+    center = (width / 2.0, height / 2.0)
+    return cv2.getRotationMatrix2D(center, tilt_deg, 1.0)
+
+
+def compose_affine(first: np.ndarray, second: np.ndarray) -> np.ndarray:
+    """Compone dos transformaciones afines 2x3: aplica `first` y después
+    `second` (equivale al producto de las matrices 3x3 homogéneas)."""
+    first_h = np.vstack([first, [0.0, 0.0, 1.0]])
+    second_h = np.vstack([second, [0.0, 0.0, 1.0]])
+    return (second_h @ first_h)[:2, :]
+
+
 def refine_alignment_with_ecc(
     frame_gray: np.ndarray,
     reference_gray: np.ndarray,

@@ -34,6 +34,15 @@ class ImprovementResultsDialog(QDialog):
         summary.setStyleSheet("font-weight: bold;")
         layout.addWidget(summary)
 
+        tilt = next((r.reference_tilt_corrected_deg for r in results if r.reference_tilt_corrected_deg is not None), None)
+        if tilt is not None:
+            tilt_label = QLabel(
+                f"Cero absoluto: el fotograma 0 venía inclinado {tilt:+.3f}° y se enderezó. "
+                "Toda la secuencia queda recta para el ojo, no solo consistente entre cuadros."
+            )
+            tilt_label.setWordWrap(True)
+            layout.addWidget(tilt_label)
+
         nav = QHBoxLayout()
         self.prev_button = QPushButton("← Anterior")
         self.prev_button.clicked.connect(self._go_prev)
