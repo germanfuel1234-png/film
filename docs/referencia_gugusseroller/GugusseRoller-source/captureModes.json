@@ -1,0 +1,14 @@
+{
+    "DNG": {
+        "description": "12bits DNGs",
+        "suffix": "dng"
+    },
+    "singleJpg": {
+        "description": "simple jpg",
+        "suffix": "jpg"
+    },
+    "bracketing": {
+        "description": "Bracketing (0,+1,-1) JPGs ",
+        "suffix": "jpg"
+    }
+}

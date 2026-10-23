@@ -1,0 +1,170 @@
+from PyQt5.QtWidgets import QComboBox, QLabel, QPushButton, QLineEdit
+from PyQt5.QtCore import Qt
+from datetime import datetime
+from ConfigFiles import ConfigFiles
+import json
+import re
+import os
+
+
+def makeValidFilename(input_str):
+    s = input_str.replace(' ', '_')
+    s = re.sub(r'[^\w\-_]', '', s)
+    s = s.encode("ascii", "ignore").decode()
+    return s
+
+
+
+class ProjectNameWidget(QLineEdit):
+    def __init__(self, win):
+        QLineEdit.__init__(self)
+        self.win=win
+        self.label=QLabel("Project")
+        self.label.setAlignment(Qt.AlignRight)
+        self.setText(datetime.now().strftime("%Y%m%d-%H%M"))
+        self.editingFinished.connect(self.handle)
+
+    def handle(self):
+        text=self.text()
+        valid=makeValidFilename(text)
+        if valid != text:
+            self.setText(valid)
+        
+    def getLabel(self):
+        return self.label
+
+
+class FilmFormatWidget(QComboBox):
+    def __init__(self, win):
+        QComboBox.__init__(self)
+        self.win=win
+        self.label=QLabel("Format")
+        self.label.setAlignment(Qt.AlignRight)
+        self.allFormats=self.win.hwSettings["filmFormats"]
+        self.addItems(self.allFormats.keys())
+        if "FilmFormat" not in self.win.settings or self.win.settings["FilmFormat"] not in self.allFormats:
+            current=list(self.allFormats.keys())[0]
+        else:
+            current=self.win.settings["FilmFormat"]
+        self.setCurrentText(current)
+        self.currentTextChanged.connect(self.handle)
+
+    def handle(self, text):
+        self.win.out.append(f"film format changed to {text}")
+        self.win.settings["FilmFormat"]=text
+        cfg=self.allFormats[text]
+        for motor in ["feeder", "filmdrive", "pickup"]:
+            m=self.win.motors[motor].motor
+            m.setFormat(cfg[motor])
+            editor=self.win.speedEdits[motor]
+            editor.blockSignals(True)
+            editor.setValue(m.speed)
+            editor.blockSignals(False)
+
+    def getLabel(self):
+        return self.label
+
+class CaptureModeWidget(QComboBox):
+    def __init__(self, win):
+        QComboBox.__init__(self)
+        self.modes=ConfigFiles("captureModes.json")
+        self.win=win        
+        self.label=QLabel("Output")
+        self.label.setAlignment(Qt.AlignRight)
+        self.addItems(self.modes.keys())
+        if "CaptureMode" not in self.win.settings or self.win.settings["CaptureMode"] not in self.modes:
+            current=list(self.modes.keys())[0]
+        else:
+            current=self.win.settings["CaptureMode"]
+        self.setCurrentText(current)
+        self.currentTextChanged.connect(self.handle)
+
+    def handle(self, text):
+        self.win.out.append(f"Capture Mode changed to {text}")
+        self.win.settings["CaptureMode"]=text
+
+    def currentMode():
+        return self.modes[self.currentText()]
+
+    def getLabel(self):
+        return self.label
+
+class ReelsDirectionWidget(QComboBox):
+    def __init__(self, win):
+        QComboBox.__init__(self)
+        choices=["cw","ccw"]
+        self.win=win
+        self.label=QLabel("Reels Direction")
+        self.label.setAlignment(Qt.AlignRight)
+        self.addItems(choices)        
+        if "ReelsDirection" in self.win.settings:
+            setting=self.win.settings["ReelsDirection"]
+        else:
+            setting="cw"
+            self.win.settings["ReelsDirection"]=setting
+
+        if setting in choices:
+            self.setCurrentText(setting)
+        else:
+            self.setCurrentText("cw")
+            self.win.settings["ReelsDirection"]="cw"
+        
+        self.currentTextChanged.connect(self.handle)
+
+    def handle(self, text):
+        self.win.settings["ReelsDirection"]=text
+        self.win.runStop.warnReelChange(text)
+
+    def getLabel(self):
+        return self.label
+
+class SaveSettingsWidget(QPushButton):
+    def __init__(self, win):
+        QPushButton.__init__(self, "Save Settings")
+        self.clicked.connect(self.execute)
+        self.win=win
+        self.lastSaved=dict(self.win.settings)
+
+    def thereAreUnsavedSettings(self):
+        return self.lastSaved!=self.win.settings
+
+    def execute(self):
+        if not self.thereAreUnsavedSettings():
+            self.win.out.append("Nothing to save.")
+            return
+        self.win.settings.save()
+        self.lastSaved=dict(self.win.settings)
+        self.win.out.append("Settings saved.")
+
+
+class ResetSpeedsWidget(QPushButton):
+    def __init__(self, win):
+        QPushButton.__init__(self, "Reset Speeds")
+        self.win=win
+        self.clicked.connect(self.execute)
+
+    def execute(self):
+        # Note: hardwarecfg.json is never written to as a result of this -
+        # it only ever restores motor.speed in memory from what is already
+        # on disk (the operator edits the JSON by hand if defaults change).
+        cfg=self.win.hwSettings["filmFormats"][self.win.filmFormat.currentText()]
+        changed=False
+        for motor in ["feeder", "filmdrive", "pickup"]:
+            target=cfg[motor]["speed"]
+            m=self.win.motors[motor].motor
+            if int(m.speed) != int(target):
+                changed=True
+            if not m.setSpeed(target):
+                self.win.out.append(
+                    f"Reset Speeds: {motor} default speed {target} is outside "
+                    f"its {m.minSpeed}-{m.maxSpeed} hardware range, left unchanged."
+                )
+                continue
+            editor=self.win.speedEdits[motor]
+            editor.blockSignals(True)
+            editor.setValue(m.speed)
+            editor.blockSignals(False)
+        if changed:
+            self.win.out.append("Speeds reset to film format defaults.")
+        else:
+            self.win.out.append("Reset Speeds had no effect: speeds already at film format defaults.")

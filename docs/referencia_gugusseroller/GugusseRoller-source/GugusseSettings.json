@@ -1,0 +1,15 @@
+{
+    "fps": 10,
+    "ExposureMicroseconds": 30000,
+    "ExposureCompensationStops": 0.0,
+    "Exposure": "Manual",
+    "ISO": 100,
+    "WhiteBalanceMode": "Manual",
+    "RedGain": 2.2,
+    "BlueGain": 2.1,
+    "WhileBalanceMode": "Auto",
+    "vflip": false,
+    "hflip": false,
+    "ReelsDirection": "cw",
+    "CaptureMode": "DNG"
+}
