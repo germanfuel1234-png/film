@@ -14,6 +14,7 @@ from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWi
 from ....core.post_stabilization import apply_improvement
 from ....vision.stabilization import AlignmentResult, ReferenceBox, apply_crop
 from ..app_context import AppContext
+from ..dialogs.improvement_results_dialog import ImprovementResultsDialog
 from ..image_utils import frame_to_pixmap
 
 
@@ -108,6 +109,9 @@ class ResultsTab(QWidget):
                 f"{r.source_path.name} ({r.error})" for r in errors[:5]
             )
         self.improve_status_label.setText(texto)
+
+        dialog = ImprovementResultsDialog(results, parent=self)
+        dialog.exec()
 
     def _reload_index(self) -> None:
         if self._ctx.storage is None:
