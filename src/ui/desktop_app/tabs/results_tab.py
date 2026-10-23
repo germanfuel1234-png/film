@@ -14,6 +14,7 @@ from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWi
 from ....core.post_stabilization import apply_improvement
 from ....vision.stabilization import AlignmentResult, ReferenceBox, apply_crop
 from ..app_context import AppContext
+from ..dialogs.filmstrip_dialog import FilmstripDialog
 from ..dialogs.improvement_results_dialog import ImprovementResultsDialog
 from ..image_utils import frame_to_pixmap
 
@@ -63,6 +64,14 @@ class ResultsTab(QWidget):
         )
         self.improve_button.clicked.connect(self._apply_improvement)
         improve_row.addWidget(self.improve_button)
+
+        self.filmstrip_button = QPushButton("Ver tira de película")
+        self.filmstrip_button.setToolTip(
+            "Apila varios fotogramas de 'mejorado/' uno debajo del otro, como una tira de\n"
+            "película real, para comprobar de un vistazo que calzan sin saltos entre cuadros."
+        )
+        self.filmstrip_button.clicked.connect(self._show_filmstrip)
+        improve_row.addWidget(self.filmstrip_button)
         root.addLayout(improve_row)
 
         self.improve_status_label = QLabel("")
@@ -125,6 +134,13 @@ class ResultsTab(QWidget):
         self.improve_status_label.setText(texto)
 
         dialog = ImprovementResultsDialog(results, parent=self)
+        dialog.exec()
+
+    def _show_filmstrip(self) -> None:
+        if self._ctx.storage is None:
+            self.improve_status_label.setText("No hay proyecto activo.")
+            return
+        dialog = FilmstripDialog(self._ctx.storage, parent=self)
         dialog.exec()
 
     def _reload_index(self) -> None:
