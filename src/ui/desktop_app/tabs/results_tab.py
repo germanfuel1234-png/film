@@ -9,14 +9,15 @@ import json
 import cv2
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QSpinBox, QVBoxLayout, QWidget
 
-from ....core.post_stabilization import apply_improvement
+from ....core.post_stabilization import ImprovedFrameResult
 from ....vision.stabilization import AlignmentResult, ReferenceBox, apply_crop
 from ..app_context import AppContext
 from ..dialogs.filmstrip_dialog import FilmstripDialog
 from ..dialogs.improvement_results_dialog import ImprovementResultsDialog
 from ..image_utils import frame_to_pixmap
+from ..improvement_worker import ImprovementWorker
 
 
 class ResultsTab(QWidget):
@@ -25,6 +26,10 @@ class ResultsTab(QWidget):
         self._ctx = ctx
         self._frame_indices: list[int] = []
         self._cursor = 0
+        self._improvement_worker: ImprovementWorker | None = None
+        self._improvement_new_count = 0
+        self._improvement_already_done_count = 0
+        self._improvement_errors = 0
 
         root = QVBoxLayout(self)
 
@@ -57,13 +62,36 @@ class ResultsTab(QWidget):
         improve_row = QHBoxLayout()
         self.improve_button = QPushButton("Aplicar mejora")
         self.improve_button.setToolTip(
-            "Recalibra TODOS los fotogramas del proyecto contra el fotograma 0 (fijo), usando\n"
-            "todas las perforaciones detectadas con ajuste robusto (RANSAC) en vez de un único\n"
-            "par. Guarda el resultado en una carpeta nueva 'mejorado/' dentro del proyecto,\n"
-            "sin tocar los originales en 'raw/'."
+            "Recalibra los fotogramas del proyecto contra el fotograma 0 (fijo), usando todas\n"
+            "las perforaciones detectadas con ajuste robusto (RANSAC) en vez de un único par.\n"
+            "Guarda el resultado en una carpeta nueva 'mejorado/' dentro del proyecto, sin\n"
+            "tocar los originales en 'raw/'. Es RESUMIBLE: si el proyecto ya tiene fotogramas\n"
+            "mejorados de una corrida anterior (completa o interrumpida), se saltean sin\n"
+            "recalcularlos — tocar este botón de nuevo retoma donde quedó."
         )
         self.improve_button.clicked.connect(self._apply_improvement)
         improve_row.addWidget(self.improve_button)
+
+        self.improve_stop_button = QPushButton("Detener mejora")
+        self.improve_stop_button.setEnabled(False)
+        self.improve_stop_button.setToolTip(
+            "Corta la corrida después del fotograma que esté procesando en este momento (nunca\n"
+            "a mitad de uno). Lo ya guardado queda intacto; tocar 'Aplicar mejora' más tarde\n"
+            "retoma justo donde se cortó."
+        )
+        self.improve_stop_button.clicked.connect(self._stop_improvement)
+        improve_row.addWidget(self.improve_stop_button)
+
+        improve_row.addWidget(QLabel("Fotogramas nuevos por tanda"))
+        self.improve_batch_spin = QSpinBox()
+        self.improve_batch_spin.setRange(1, 1_000_000)
+        self.improve_batch_spin.setValue(1_000_000)
+        self.improve_batch_spin.setToolTip(
+            "Para películas enteras (miles de fotogramas), conviene fraccionar en tandas en vez\n"
+            "de procesar todo de una sola corrida larga. Dejar en el máximo procesa todo lo\n"
+            "pendiente de una vez."
+        )
+        improve_row.addWidget(self.improve_batch_spin)
 
         self.filmstrip_button = QPushButton("Ver tira de película")
         self.filmstrip_button.setToolTip(
@@ -79,6 +107,8 @@ class ResultsTab(QWidget):
         root.addWidget(self.improve_status_label)
 
     def _apply_improvement(self) -> None:
+        if self._improvement_worker is not None and self._improvement_worker.isRunning():
+            return  # ya hay una corrida en curso
         if self._ctx.storage is None:
             self.improve_status_label.setText("No hay proyecto activo.")
             return
@@ -90,28 +120,58 @@ class ResultsTab(QWidget):
             return
 
         self.improve_button.setEnabled(False)
+        self.improve_stop_button.setEnabled(True)
+        self._improvement_new_count = 0
+        self._improvement_already_done_count = 0
+        self._improvement_errors = 0
         self.improve_status_label.setText("Aplicando mejora, un momento...")
-        from PySide6.QtWidgets import QApplication
 
-        QApplication.processEvents()  # que se vea el mensaje antes de bloquear con el procesamiento
+        self._improvement_worker = ImprovementWorker(
+            self._ctx.storage,
+            calib.left_zone,
+            calib.right_zone,
+            calib.reference_box,
+            rotation_deg=calib.output_rotation_deg,
+            max_frames=self.improve_batch_spin.value(),
+        )
+        self._improvement_worker.frame_processed.connect(self._on_improvement_frame_processed)
+        self._improvement_worker.finished_run.connect(self._on_improvement_finished)
+        self._improvement_worker.start()
 
-        try:
-            results = apply_improvement(
-                self._ctx.storage,
-                calib.left_zone,
-                calib.right_zone,
-                calib.reference_box,
-                rotation_deg=calib.output_rotation_deg,
-            )
-        finally:
-            self.improve_button.setEnabled(True)
+    def _stop_improvement(self) -> None:
+        if self._improvement_worker is not None:
+            self.improve_status_label.setText("Deteniendo (termina el fotograma que esté procesando)...")
+            self._improvement_worker.request_stop()
+
+    def _on_improvement_frame_processed(self, result: ImprovedFrameResult) -> None:
+        if result.already_done:
+            self._improvement_already_done_count += 1
+        elif result.error is not None:
+            self._improvement_errors += 1
+            self._improvement_new_count += 1
+        else:
+            self._improvement_new_count += 1
+        self.improve_status_label.setText(
+            f"Procesando... fotograma {result.frame_index} · "
+            f"{self._improvement_new_count} nuevo(s), {self._improvement_already_done_count} ya hechos"
+            + (f", {self._improvement_errors} con error" if self._improvement_errors else "")
+        )
+
+    def _on_improvement_finished(self, results: list[ImprovedFrameResult]) -> None:
+        self.improve_button.setEnabled(True)
+        self.improve_stop_button.setEnabled(False)
+        self._improvement_worker = None
 
         if not results:
-            self.improve_status_label.setText("No hay fotogramas guardados en este proyecto para mejorar.")
+            self.improve_status_label.setText(
+                "No hay fotogramas guardados en este proyecto para mejorar, o ya estaba todo hecho."
+            )
             return
 
         ok = [r for r in results if r.error is None]
         errors = [r for r in results if r.error is not None]
+        new_ok = [r for r in ok if not r.already_done]
+        already_done = [r for r in ok if r.already_done]
         angles = [r.alignment.angle_deg for r in ok if r.alignment is not None]
         rango_angulo = f" · giro entre {min(angles):+.2f}° y {max(angles):+.2f}°" if angles else ""
 
@@ -124,8 +184,8 @@ class ResultsTab(QWidget):
         )
 
         texto = (
-            f"Mejora aplicada: {len(ok)}/{len(results)} fotogramas guardados en "
-            f"{self._ctx.storage.project_dir / 'mejorado'}{rango_angulo}.{enderezado}"
+            f"Mejora aplicada: {len(new_ok)} fotograma(s) nuevo(s) + {len(already_done)} ya hecho(s) de antes "
+            f"= {len(ok)}/{len(results)} en {self._ctx.storage.project_dir / 'mejorado'}{rango_angulo}.{enderezado}"
         )
         if errors:
             texto += f"\n⚠ {len(errors)} fotograma(s) con error: " + ", ".join(

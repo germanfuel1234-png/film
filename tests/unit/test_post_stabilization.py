@@ -183,3 +183,123 @@ def test_apply_improvement_with_rotation_swaps_output_dimensions(project_storage
         img = cv2.imread(str(r.output_path))
         assert img.shape[0] == REFERENCE_BOX.width
         assert img.shape[1] == REFERENCE_BOX.height
+
+
+# --- pedido del cliente: resumible para películas enteras (fraccionar por
+# tanda + retomar progreso si algo se corta a mitad de camino) ---
+
+
+def test_second_run_skips_already_done_frames(project_storage_with_real_frames):
+    """Si se vuelve a llamar sobre un proyecto ya mejorado (ej. se reabre
+    el proyecto), los fotogramas ya resueltos no se vuelven a calcular:
+    deben volver marcados already_done=True y sin tocar el archivo."""
+    first = apply_improvement(project_storage_with_real_frames, TOP_ZONE, BOTTOM_ZONE, REFERENCE_BOX)
+    ok_first = [r for r in first if r.error is None]
+    assert ok_first and all(not r.already_done for r in ok_first)
+
+    mtimes_before = {r.output_path: r.output_path.stat().st_mtime_ns for r in ok_first}
+
+    second = apply_improvement(project_storage_with_real_frames, TOP_ZONE, BOTTOM_ZONE, REFERENCE_BOX)
+    ok_second = [r for r in second if r.error is None]
+
+    assert len(ok_second) == len(ok_first)
+    assert all(r.already_done for r in ok_second)
+    for r in ok_second:
+        assert r.output_path.stat().st_mtime_ns == mtimes_before[r.output_path]  # no se reescribió
+
+
+def test_max_frames_limits_new_frames_but_not_skips(project_storage_with_real_frames):
+    """Fraccionar por tanda: solo procesa como máximo `max_frames`
+    fotogramas NUEVOS por llamada; una segunda llamada retoma el resto."""
+    first = apply_improvement(project_storage_with_real_frames, TOP_ZONE, BOTTOM_ZONE, REFERENCE_BOX, max_frames=3)
+    new_in_first = [r for r in first if not r.already_done]
+    assert len(new_in_first) == 3
+
+    second = apply_improvement(project_storage_with_real_frames, TOP_ZONE, BOTTOM_ZONE, REFERENCE_BOX, max_frames=3)
+    already_done_in_second = [r for r in second if r.already_done]
+    new_in_second = [r for r in second if not r.already_done]
+    assert len(already_done_in_second) == 3  # los 3 de la tanda anterior
+    assert len(new_in_second) == 3  # la tanda siguiente
+
+    # tercera tanda: quedaban 4 de los 10 fotogramas totales (3 + 3 ya hechos)
+    third = apply_improvement(project_storage_with_real_frames, TOP_ZONE, BOTTOM_ZONE, REFERENCE_BOX, max_frames=100)
+    assert len([r for r in third if r.already_done]) == 6
+    assert len([r for r in third if not r.already_done]) == 4
+    assert len(third) == 10
+
+
+def test_should_stop_halts_before_next_new_frame(project_storage_with_real_frames):
+    """Pedido del cliente: poder detener una corrida larga y que no se
+    pierda lo ya guardado. should_stop se consulta ANTES de cada
+    fotograma nuevo, nunca corta uno a mitad de camino."""
+    processed_so_far = []
+
+    def stop_after_two():
+        return len(processed_so_far) >= 2
+
+    results = apply_improvement(
+        project_storage_with_real_frames,
+        TOP_ZONE,
+        BOTTOM_ZONE,
+        REFERENCE_BOX,
+        should_stop=stop_after_two,
+        on_frame_processed=lambda r: processed_so_far.append(r) if not r.already_done else None,
+    )
+    new_results = [r for r in results if not r.already_done]
+    assert len(new_results) == 2
+
+    # retomar: la corrida siguiente completa el resto sin volver a tocar
+    # los 2 primeros
+    rest = apply_improvement(project_storage_with_real_frames, TOP_ZONE, BOTTOM_ZONE, REFERENCE_BOX)
+    assert len([r for r in rest if r.already_done]) == 2
+    assert len([r for r in rest if not r.already_done]) == 8
+
+
+def test_on_frame_processed_callback_fires_for_every_frame_including_skips(project_storage_with_real_frames):
+    apply_improvement(project_storage_with_real_frames, TOP_ZONE, BOTTOM_ZONE, REFERENCE_BOX)  # primera corrida
+
+    seen = []
+    apply_improvement(
+        project_storage_with_real_frames,
+        TOP_ZONE,
+        BOTTOM_ZONE,
+        REFERENCE_BOX,
+        on_frame_processed=seen.append,
+    )
+    assert len(seen) == 10
+    assert all(r.already_done for r in seen)
+
+
+def test_interrupted_write_leaves_no_corrupt_final_file(project_storage_with_real_frames, monkeypatch):
+    """Simula un corte de proceso a mitad del guardado de un fotograma:
+    el archivo temporal queda huérfano, pero NUNCA debe existir un
+    'frame_XXXXX_mejorado.png' corrupto con ese nombre final."""
+    import src.core.post_stabilization as post_stabilization
+
+    original_imwrite = cv2.imwrite
+    call_count = {"n": 0}
+
+    def flaky_imwrite(path, img):
+        call_count["n"] += 1
+        if call_count["n"] == 2:
+            # escribe el temporal pero el proceso "se corta" antes del rename
+            original_imwrite(path, img)
+            raise RuntimeError("corte simulado a mitad de la escritura")
+        return original_imwrite(path, img)
+
+    monkeypatch.setattr(post_stabilization.cv2, "imwrite", flaky_imwrite)
+
+    with pytest.raises(RuntimeError):
+        apply_improvement(project_storage_with_real_frames, TOP_ZONE, BOTTOM_ZONE, REFERENCE_BOX)
+
+    output_dir = project_storage_with_real_frames.project_dir / "mejorado"
+    final_files = list(output_dir.glob("frame_*_mejorado.png"))
+    tmp_files = list(output_dir.glob(".tmp_frame_*_mejorado.png"))
+    assert len(final_files) == 1  # el primer fotograma sí llegó a completarse
+    assert len(tmp_files) == 1  # el segundo quedó a medio camino, nunca se renombró
+
+    # una corrida posterior limpia el huérfano y retoma desde ahí sin problema
+    results = apply_improvement(project_storage_with_real_frames, TOP_ZONE, BOTTOM_ZONE, REFERENCE_BOX)
+    ok = [r for r in results if r.error is None]
+    assert len(ok) == 10
+    assert not list(output_dir.glob(".tmp_frame_*_mejorado.png"))
