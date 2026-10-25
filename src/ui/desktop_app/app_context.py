@@ -130,4 +130,5 @@ class AppContext(QObject):
             calibrator=self.calibrator,
             storage=self.storage,
             steps_per_frame=self.config.motor.steps_per_frame,
+            settle_delay_s=self.config.motor.settle_delay_s,
         )

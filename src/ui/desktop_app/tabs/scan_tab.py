@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QPushButton,
     QSpinBox,
+    QTextEdit,
     QVBoxLayout,
     QWidget,
 )
@@ -119,6 +120,15 @@ class ScanTab(QWidget):
         self.counter_label = QLabel("Guardados / aceptados: 0 / 0")
         capture_layout.addWidget(self.counter_label)
 
+        self.frame_log = QTextEdit()
+        self.frame_log.setReadOnly(True)
+        self.frame_log.setMaximumHeight(140)
+        self.frame_log.setPlaceholderText(
+            "Acá va apareciendo, fotograma a fotograma, si la cámara confirma que quedó en la "
+            "posición esperada (perforaciones alineadas contra la Referencia 1) o si hay que revisar algo."
+        )
+        capture_layout.addWidget(self.frame_log)
+
         root.addWidget(capture_box)
 
         export_btn = QPushButton("Exportar proyecto · copia verificada SHA-256")
@@ -154,6 +164,7 @@ class ScanTab(QWidget):
         # pegado el contador del proyecto anterior (confuso: parecía que
         # el nuevo proyecto ya tenía fotogramas guardados).
         self.counter_label.setText("Guardados / aceptados: 0 / 0")
+        self.frame_log.clear()
         self._refresh_storage_estimate()
 
     def _open_selected_project(self) -> None:
@@ -232,6 +243,7 @@ class ScanTab(QWidget):
     def _on_scan_error(self, msg: str) -> None:
         self._batch_had_error = True
         self.project_status_label.setText(f"Error: {msg}")
+        self.frame_log.append(f'<span style="color:#e74c3c;">⛔ {msg}</span>')
 
     def _on_batch_finished(self) -> None:
         # "Tanda finalizada." NO debe pisar un mensaje de error: antes
@@ -252,6 +264,8 @@ class ScanTab(QWidget):
     def _on_frame_processed(self, result: FrameResult) -> None:
         total = self._ctx.scan_controller.frames_saved if self._ctx.scan_controller else 0
         self.counter_label.setText(f"Guardados / aceptados: {total} / {total} · {result.alignment.as_label()}")
+        color = "#2ecc71" if result.alignment.ok else "#e67e22"
+        self.frame_log.append(f'<span style="color:{color};">{result.status_message}</span>')
         if self._ctx.current_project is not None:
             self._ctx.project_manager.update_frames_saved(self._ctx.current_project.project_id, total)
         self._refresh_storage_estimate()

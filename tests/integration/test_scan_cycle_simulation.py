@@ -40,7 +40,9 @@ def test_run_batch_saves_frames_and_corrections(tmp_path):
     calibrator = _build_calibrator(camera)
     storage = ProjectStorage(tmp_path / "proyecto_test")
 
-    controller = ScanController(camera=camera, motor=motor, calibrator=calibrator, storage=storage, steps_per_frame=1000)
+    controller = ScanController(
+        camera=camera, motor=motor, calibrator=calibrator, storage=storage, steps_per_frame=1000, settle_delay_s=0.0
+    )
 
     processed = []
     errors = []
@@ -68,7 +70,7 @@ def test_resuming_project_does_not_overwrite_existing_frames(tmp_path):
     storage = ProjectStorage(tmp_path / "proyecto_test")
 
     # sesión 1: se escanean 3 fotogramas y se cierra el programa
-    controller_1 = ScanController(camera=camera, motor=motor, calibrator=calibrator, storage=storage)
+    controller_1 = ScanController(camera=camera, motor=motor, calibrator=calibrator, storage=storage, settle_delay_s=0.0)
     controller_1.run_batch(3)
     assert controller_1.frames_saved == 3
     original_frame_0_bytes = (storage.raw_dir / "frame_00000.sim.png").read_bytes()
@@ -76,7 +78,7 @@ def test_resuming_project_does_not_overwrite_existing_frames(tmp_path):
     # sesión 2: se "abre / reanuda" el mismo proyecto (storage apunta a la
     # misma carpeta) con un ScanController nuevo, como hace AppContext al
     # reabrir un proyecto existente
-    controller_2 = ScanController(camera=camera, motor=motor, calibrator=calibrator, storage=storage)
+    controller_2 = ScanController(camera=camera, motor=motor, calibrator=calibrator, storage=storage, settle_delay_s=0.0)
     assert controller_2.frames_saved == 3  # no vuelve a arrancar en 0
 
     controller_2.run_batch(2)
@@ -95,7 +97,7 @@ def test_export_manifest_has_matching_hashes(tmp_path):
     motor.connect()
     calibrator = _build_calibrator(camera)
     storage = ProjectStorage(tmp_path / "proyecto_test")
-    controller = ScanController(camera=camera, motor=motor, calibrator=calibrator, storage=storage)
+    controller = ScanController(camera=camera, motor=motor, calibrator=calibrator, storage=storage, settle_delay_s=0.0)
 
     controller.run_batch(2)
     manifest = storage.export_manifest()

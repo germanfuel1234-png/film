@@ -12,6 +12,7 @@ from pathlib import Path
 
 from PySide6.QtWidgets import (
     QComboBox,
+    QDoubleSpinBox,
     QFileDialog,
     QFormLayout,
     QGroupBox,
@@ -149,6 +150,16 @@ class SettingsTab(QWidget):
         self.steps_per_frame_spin.setRange(1, 100000)
         form.addRow("Pasos por fotograma", self.steps_per_frame_spin)
 
+        self.settle_delay_spin = QDoubleSpinBox()
+        self.settle_delay_spin.setRange(0.0, 10.0)
+        self.settle_delay_spin.setSingleStep(0.1)
+        self.settle_delay_spin.setSuffix(" s")
+        self.settle_delay_spin.setToolTip(
+            "Pausa entre 'el Arduino confirmó que terminó de avanzar' y 'se dispara la cámara',\n"
+            "para que la vibración mecánica del avance se asiente antes de sacar la foto."
+        )
+        form.addRow("Espera tras avanzar (asentar vibración)", self.settle_delay_spin)
+
         return box
 
     def _build_calibration_box(self) -> QGroupBox:
@@ -224,6 +235,7 @@ class SettingsTab(QWidget):
         self.port_combo.setCurrentText(config.motor.port)
         self.baudrate_spin.setValue(config.motor.baudrate)
         self.steps_per_frame_spin.setValue(config.motor.steps_per_frame)
+        self.settle_delay_spin.setValue(config.motor.settle_delay_s)
 
         self.film_format_combo.setCurrentText(config.calibration.film_format)
         for label, value in zip(
@@ -273,6 +285,7 @@ class SettingsTab(QWidget):
                 port=self.port_combo.currentText().strip(),
                 baudrate=self.baudrate_spin.value(),
                 steps_per_frame=self.steps_per_frame_spin.value(),
+                settle_delay_s=self.settle_delay_spin.value(),
             ),
             calibration=CalibrationDefaults(
                 film_format=self.film_format_combo.currentText(),

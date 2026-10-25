@@ -20,7 +20,8 @@ Se lee al arrancar el programa (`main.py`). Si algún valor falta o el archivo t
     "mode": "simulated",
     "port": "",
     "baudrate": 115200,
-    "steps_per_frame": 1000
+    "steps_per_frame": 1000,
+    "settle_delay_s": 0.5
   },
   "calibration": {
     "film_format": "35mm",
@@ -45,6 +46,7 @@ Se lee al arrancar el programa (`main.py`). Si algún valor falta o el archivo t
 | `motor.port` | El puerto donde el sistema operativo ve el Arduino: en Windows algo como `"COM3"`, en Linux `"/dev/ttyACM0"` o `"/dev/ttyUSB0"`. Se ve en el Administrador de dispositivos (Windows) o con `ls /dev/tty*` (Linux). | Ustedes, al conectar el Arduino. |
 | `motor.baudrate` | `115200` — tiene que coincidir con el valor configurado en el firmware (`firmware/stepper_controller/stepper_controller.ino`). No cambiar salvo que también se cambie el firmware. | — |
 | `motor.steps_per_frame` | Cuántos pasos del motor avanza por cada fotograma. Depende del motor, el driver y la mecánica del arrastre de película. Hay que calibrarlo probando con el rollo real (pestaña "Calibración" → avance fino). | Se determina probando con el hardware real. |
+| `motor.settle_delay_s` | Segundos de pausa entre que el Arduino confirma que terminó de avanzar (`ACK`) y se dispara la cámara — deja asentar la vibración mecánica del movimiento antes de sacar la foto. `0.5` es un punto de partida razonable; si las fotos salen movidas/borrosas, subirlo; si el motor es firme y hay que escanear rápido, se puede bajar. | Se ajusta probando con el motor/chasis real: si hay micro-movimiento visible en las fotos, subir este valor. |
 | `calibration.film_format` | `"35mm"` o `"16mm"`. | El tipo de rollo que van a escanear. |
 | `calibration.search_zone_left` / `search_zone_right` | Rectángulo (`x0,y0,x1,y1` en píxeles de la imagen de la cámara) donde el sistema busca las perforaciones. Los nombres son "left/right" pero en las fotos reales del cliente las perforaciones están arriba/abajo (orientación horizontal) — las zonas funcionan igual, solo cambia qué representan geométricamente. Los valores por defecto están **validados contra las fotos reales en `assets/real_frames/`** (no son sintéticos); igual van a necesitar recalibrarse una vez conectada la cámara industrial definitiva, porque esas fotos se sacaron con una Canon de prueba a otra resolución/encuadre. | Se determina mirando el preview real de la cámara, una vez conectada (pestaña "Perforaciones" → "Probar detección" para confirmar visualmente). |
 | `calibration.reference_box` | El recorte final (encuadre) que se guarda por cada fotograma, en píxeles de la imagen de la cámara. También depende de la cámara/lente real. | Igual que las zonas de búsqueda. |

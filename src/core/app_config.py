@@ -47,6 +47,12 @@ class MotorConfig:
     port: str = ""
     baudrate: int = 115200
     steps_per_frame: int = 1000
+    # Pausa después de que el Arduino confirma el movimiento y antes de
+    # disparar la cámara: deja que la vibración mecánica del avance se
+    # asiente para no sacar la foto todavía temblando. Se determina
+    # probando con el hardware real (motor/chasis); 0.5s es un punto de
+    # partida razonable.
+    settle_delay_s: float = 0.5
 
 
 @dataclass
@@ -116,6 +122,7 @@ def load_app_config(path: Path | str = DEFAULT_CONFIG_PATH) -> AppConfig:
         port=raw_motor.get("port", defaults.motor.port),
         baudrate=raw_motor.get("baudrate", defaults.motor.baudrate),
         steps_per_frame=raw_motor.get("steps_per_frame", defaults.motor.steps_per_frame),
+        settle_delay_s=raw_motor.get("settle_delay_s", defaults.motor.settle_delay_s),
     )
 
     raw_calib = raw.get("calibration", {})
@@ -150,6 +157,7 @@ def config_to_dict(config: AppConfig) -> dict:
             "port": config.motor.port,
             "baudrate": config.motor.baudrate,
             "steps_per_frame": config.motor.steps_per_frame,
+            "settle_delay_s": config.motor.settle_delay_s,
         },
         "calibration": {
             "film_format": config.calibration.film_format,
