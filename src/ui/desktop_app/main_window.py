@@ -3,7 +3,8 @@ estaba en el prototipo) para editar config/hardware_config.json desde la UI."""
 
 from __future__ import annotations
 
-from PySide6.QtWidgets import QLabel, QMainWindow, QStatusBar, QTabWidget, QVBoxLayout, QWidget
+from PySide6.QtGui import QColor
+from PySide6.QtWidgets import QGraphicsDropShadowEffect, QLabel, QMainWindow, QStatusBar, QTabWidget, QVBoxLayout, QWidget
 
 from .app_context import AppContext
 from .tabs.calibration_tab import CalibrationTab
@@ -60,12 +61,42 @@ class MainWindow(QMainWindow):
         self.setStatusBar(status)
         status.showMessage(f"Listo · v{APP_VERSION}")
 
+        # Marca de agua tipo "insignia" (pedido del cliente, basado en un
+        # diseño HTML/CSS que mandó) — recreada con QSS porque esto es una
+        # app de escritorio Qt, no una página web: no hay box-shadow ni
+        # transiciones CSS, así que la sombra se arma con
+        # QGraphicsDropShadowEffect y el "levantarse" al pasar el mouse se
+        # deja de lado (Qt no anima propiedades de QSS), pero el resto del
+        # look (insignia oscura, ícono </>, borde dorado que resalta en
+        # hover, "GR" en blanco con la G dorada) sí se reproduce.
         credit_label = QLabel(
-            '<a href="https://germanrodriguez.ar/" style="color:#7aa2f7; text-decoration:none;">'
-            "Hecho y diseñado por <b>German Rodríguez</b></a>"
+            '<span style="color:#f59e0b; font-weight:700;">&lt;/&gt;</span>'
+            '&nbsp;&nbsp;'
+            '<span style="color:#94a3b8;">Design &amp; Code by '
+            '<a href="https://germanrodriguez.ar/" style="color:#ffffff; text-decoration:none; font-weight:700;">'
+            '<span style="color:#f59e0b;">G</span>R</a></span>'
         )
         credit_label.setOpenExternalLinks(True)
-        credit_label.setStyleSheet("font-family: Georgia, 'Times New Roman', serif; font-style: italic; padding: 2px 10px;")
+        credit_label.setStyleSheet(
+            """
+            QLabel {
+                background-color: #0f172a;
+                padding: 6px 16px;
+                border-radius: 13px;
+                font-size: 11px;
+                font-family: 'Segoe UI', Arial, sans-serif;
+                border: 1px solid rgba(217, 119, 6, 0.35);
+            }
+            QLabel:hover {
+                border: 1px solid rgba(217, 119, 6, 0.85);
+            }
+            """
+        )
+        shadow = QGraphicsDropShadowEffect(credit_label)
+        shadow.setBlurRadius(18)
+        shadow.setOffset(0, 4)
+        shadow.setColor(QColor(0, 0, 0, 140))
+        credit_label.setGraphicsEffect(shadow)
         status.addPermanentWidget(credit_label)
 
     def _on_tab_changed(self, index: int) -> None:
